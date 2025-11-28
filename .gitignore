@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Android Studio
+.idea/
+*.iml
+local.properties
+.DS_Store
+
+# Generated
+.cxx/
+.externalNativeBuild/
+captures/
+outputs/
+
+# Others
+*.keystore
+*.jks
+*.log
+app/src/main/jniLibs/
+app/.cxx/
+app/build/
+app/libs/*.aar
+third_party/

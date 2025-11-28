@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Sudodroid</string>
+    <string name="vpn_channel_name">Sudodroid VPN</string>
+    <string name="vpn_channel_description">Keeps your Sudoku tunnel active</string>
+    <string name="notification_running">Sudodroid is running</string>
+</resources>

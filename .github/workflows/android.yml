@@ -1,0 +1,130 @@
+name: Android CI
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Init nested submodules
+        run: git submodule update --init --recursive
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          gomobile init
+
+      - name: Install Android SDK / NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            ndk;26.1.10909125
+
+      - name: Ensure hev-socks5-tunnel present
+        run: |
+          set -e
+          mkdir -p third_party
+          if [ ! -d third_party/hev-socks5-tunnel ]; then
+            git clone --recursive https://github.com/heiher/hev-socks5-tunnel third_party/hev-socks5-tunnel
+          fi
+          cd third_party/hev-socks5-tunnel
+          git checkout 47b6cb90f4641ed9b00911ef2c521a9836b60c5b
+          git submodule update --init --recursive || true
+
+
+      - name: Build hev-socks5-tunnel JNI libs
+        working-directory: ${{ github.workspace }}/app/src/main/jni
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+        run: |
+          set -e
+          echo "=== app/src/main/jni/Android.mk ==="
+          cat Android.mk
+          echo "=== app/src/main/jni/hev-socks5-tunnel/Android.mk ==="
+          cat hev-socks5-tunnel/Android.mk
+          echo "=== third_party/hev-socks5-tunnel/Android.mk ==="
+          cat ../../../../third_party/hev-socks5-tunnel/Android.mk || echo "no third_party Android.mk"
+
+          "$ANDROID_NDK_ROOT/ndk-build" NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk
+          ls -R libs || true
+          mkdir -p ../jniLibs/armeabi-v7a ../jniLibs/arm64-v8a
+          cp libs/armeabi-v7a/libhev-socks5-tunnel*.so ../jniLibs/armeabi-v7a/ || true
+          cp libs/arm64-v8a/libhev-socks5-tunnel*.so ../jniLibs/arm64-v8a/ || true
+          ls -R ../jniLibs
+
+
+      - name: Build gomobile AAR (Sudoku core)
+        working-directory: ${{ github.workspace }}
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+        run: |
+          bash scripts/build_sudoku_aar.sh
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Generate GitHub CI keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore github.keystore \
+            -storepass github \
+            -keypass github \
+            -alias github \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=GitHub CI, OU=CI, O=GitHub, L=Internet, S=Internet, C=US"
+
+      - name: Build APK
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+        run: ./gradlew :app:assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sudodroid-apk
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: Sudodroid ${{ github.ref_name }}
+          files: app/build/outputs/apk/release/*.apk
+          body: |
+            Automated release for ${{ github.ref_name }} including armeabi-v7a and arm64-v8a native libraries.

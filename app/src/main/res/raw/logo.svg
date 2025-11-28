@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- 背景容器 -->
+    <rect width="512" height="512" rx="115" fill="#F5A9B8"/>
+    
+    <!-- 纸飞机 -->
+    <path d="M110 256L420 120L280 430L230 300L110 256Z" fill="#5BCEFA"/>
+    <path d="M420 120L230 300L350 320L420 120Z" fill="#FFFFFF"/>
+    
+    <!-- 尾迹/速度线 -->
+    <path d="M80 350L180 320" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+    <path d="M60 280L100 270" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+</svg>
