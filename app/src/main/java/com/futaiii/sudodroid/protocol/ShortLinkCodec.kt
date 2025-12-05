@@ -3,7 +3,6 @@ package com.futaiii.sudodroid.protocol
 import android.util.Base64
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
-import com.futaiii.sudodroid.data.MieruTransport
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
@@ -27,16 +26,13 @@ object ShortLinkCodec {
             "short link missing required fields"
         }
 
-        val ascii = when (payload.ascii?.lowercase()) {
-            "ascii", "prefer_ascii" -> AsciiMode.PREFER_ASCII
-            else -> AsciiMode.PREFER_ENTROPY
-        }
-
+        val ascii = decodeAscii(payload.ascii)
         val aead = when (payload.aead?.lowercase()) {
             null, "" -> AeadMode.NONE
             else -> AeadMode.fromWire(payload.aead)
         }
         val local = if (payload.mixPort == null || payload.mixPort == 0) 1080 else payload.mixPort
+        val enablePureDownlink = payload.packedDownlink?.let { !it } ?: true
 
         return NodeConfig(
             name = payload.host,
@@ -45,12 +41,10 @@ object ShortLinkCodec {
             key = payload.key ?: "",
             asciiMode = ascii,
             aead = aead,
+            enablePureDownlink = enablePureDownlink,
             localPort = local,
             proxyMode = ProxyMode.PAC,
-            ruleUrls = defaultRuleUrls,
-            enableMieru = payload.mieruPort != null && payload.mieruPort > 0,
-            mieruPort = payload.mieruPort,
-            mieruTransport = MieruTransport.TCP
+            ruleUrls = defaultRuleUrls
         )
     }
 
@@ -60,13 +54,10 @@ object ShortLinkCodec {
             host = host,
             port = node.port,
             key = node.key,
-            ascii = when (node.asciiMode) {
-                AsciiMode.PREFER_ASCII -> "ascii"
-                AsciiMode.PREFER_ENTROPY -> "entropy"
-            },
+            ascii = encodeAscii(node.asciiMode),
             aead = node.aead.wireName,
             mixPort = node.localPort,
-            mieruPort = if (node.enableMieru) node.mieruPort else null
+            packedDownlink = !node.enablePureDownlink
         )
         val data = json.encodeToString(Payload.serializer(), payload)
         val encoded = Base64.encodeToString(
@@ -84,8 +75,22 @@ object ShortLinkCodec {
         @SerialName("a") val ascii: String? = null,
         @SerialName("e") val aead: String? = null,
         @SerialName("m") val mixPort: Int? = null,
-        @SerialName("mp") val mieruPort: Int? = null
+        @SerialName("x") val packedDownlink: Boolean? = null
     )
+}
+
+private fun encodeAscii(mode: AsciiMode): String {
+    return when (mode) {
+        AsciiMode.PREFER_ASCII -> "ascii"
+        AsciiMode.PREFER_ENTROPY -> "entropy"
+    }
+}
+
+private fun decodeAscii(raw: String?): AsciiMode {
+    return when (raw?.lowercase()) {
+        "ascii", "prefer_ascii" -> AsciiMode.PREFER_ASCII
+        else -> AsciiMode.PREFER_ENTROPY
+    }
 }
 
 private fun decodeBase64Flexible(encoded: String): ByteArray {

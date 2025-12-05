@@ -58,7 +58,6 @@ object GoCoreClient {
 
     fun buildConfigJson(node: NodeConfig): String {
         val serverAddress = "${node.host.trim()}:${node.port}"
-        val enableMieru = node.enableMieru && node.mieruPort != null
         val proxyMode = node.proxyMode.wireValue
         val ruleUrls = if (node.proxyMode == ProxyMode.PAC) {
             node.ruleUrls.mapNotNull { url ->
@@ -77,19 +76,8 @@ object GoCoreClient {
             paddingMax = node.paddingMax,
             ruleUrls = ruleUrls,
             ascii = node.asciiMode.wireValue,
-            enableMieru = enableMieru,
-            mieruConfig = if (enableMieru) {
-                GoMieruConfig(
-                    port = node.mieruPort!!,
-                    transport = node.mieruTransport.wireValue,
-                    mtu = node.mieruMtu,
-                    multiplexing = node.mieruMultiplexing.wireValue,
-                    username = node.mieruUsername?.takeIf { it.isNotBlank() },
-                    password = node.mieruPassword?.takeIf { it.isNotBlank() }
-                )
-            } else {
-                null
-            },
+            enablePureDownlink = node.enablePureDownlink,
+            disableHttpMask = false,
             proxyMode = proxyMode
         )
         return json.encodeToString(config)
@@ -108,18 +96,8 @@ object GoCoreClient {
         @SerialName("padding_max") val paddingMax: Int,
         @SerialName("rule_urls") val ruleUrls: List<String> = emptyList(),
         val ascii: String,
-        @SerialName("enable_mieru") val enableMieru: Boolean,
-        @SerialName("mieru_config") val mieruConfig: GoMieruConfig? = null,
+        @SerialName("enable_pure_downlink") val enablePureDownlink: Boolean = true,
+        @SerialName("disable_http_mask") val disableHttpMask: Boolean = false,
         @SerialName("proxy_mode") val proxyMode: String
-    )
-
-    @Serializable
-    private data class GoMieruConfig(
-        val port: Int,
-        val transport: String,
-        val mtu: Int,
-        val multiplexing: String,
-        val username: String? = null,
-        val password: String? = null
     )
 }

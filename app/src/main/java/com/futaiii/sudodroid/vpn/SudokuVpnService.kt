@@ -35,41 +35,83 @@ class SudokuVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
-            if (intent?.action == ACTION_STOP) {
-                stopVpnInternal()
-                // Mark this start as finished so the system does not
-                // attempt to restart the service.
-                stopSelf()
-                START_NOT_STICKY
-            } else {
-                if (tunnelStarted) {
-                    Log.i(TAG, "VPN already running, ignoring duplicate start")
-                    return START_STICKY
-                }
-                statusFlow.value = false
-                val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
-                val node = selectNode(nodeId)
-                if (node == null) {
-                    Log.e(TAG, "Cannot start VPN: node not found")
+            when (intent?.action) {
+                ACTION_STOP -> {
+                    stopVpnInternal()
+                    // Mark this start as finished so the system does not
+                    // attempt to restart the service.
                     stopSelf()
                     START_NOT_STICKY
-                } else {
-                    activeNode = node
+                }
 
-                    startForeground(NOTI_ID, buildNotification())
+                ACTION_SWITCH_NODE -> {
+                    if (!tunnelStarted) {
+                        Log.w(TAG, "Switch node requested but VPN is not running; ignoring")
+                        return START_STICKY
+                    }
+                    val nodeId = intent.getStringExtra(EXTRA_NODE_ID)
+                    if (nodeId.isNullOrBlank()) {
+                        Log.w(TAG, "Switch node requested without node ID; ignoring")
+                        return START_STICKY
+                    }
                     scope.launch {
+                        val node = selectNode(nodeId)
+                        if (node == null) {
+                            Log.e(TAG, "Switch node failed: node not found for id=$nodeId")
+                            return@launch
+                        }
+                        val current = activeNode
+                        if (current != null && current.id == node.id) {
+                            Log.i(TAG, "Switch node requested to current active node; skipping")
+                            return@launch
+                        }
+                        // Preserve existing local port to keep tunnel wiring stable.
+                        val effectiveNode = if (current != null) {
+                            node.copy(localPort = current.localPort)
+                        } else {
+                            node
+                        }
+                        activeNode = effectiveNode
                         try {
-                            startCore(node)
-                            buildVpnInterface(node)
-                            startTunnel(node)
-                            statusFlow.value = true
+                            startCore(effectiveNode)
+                            Log.i(TAG, "Switched core to node ${effectiveNode.name.ifBlank { effectiveNode.host }}")
                         } catch (e: Throwable) {
-                            Log.e(TAG, "Failed to start VPN", e)
-                            statusFlow.value = false
-                            stopSelf()
+                            Log.e(TAG, "Failed to switch core to new node", e)
                         }
                     }
                     START_STICKY
+                }
+
+                else -> {
+                    if (tunnelStarted) {
+                        Log.i(TAG, "VPN already running, ignoring duplicate start")
+                        return START_STICKY
+                    }
+                    statusFlow.value = false
+                    val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
+                    val node = selectNode(nodeId)
+                    if (node == null) {
+                        Log.e(TAG, "Cannot start VPN: node not found")
+                        stopSelf()
+                        START_NOT_STICKY
+                    } else {
+                        activeNode = node
+
+                        startForeground(NOTI_ID, buildNotification())
+                        scope.launch {
+                            try {
+                                startCore(node)
+                                buildVpnInterface(node)
+                                startTunnel(node)
+                                statusFlow.value = true
+                            } catch (e: Throwable) {
+                                Log.e(TAG, "Failed to start VPN", e)
+                                statusFlow.value = false
+                                stopSelf()
+                            }
+                        }
+                        START_STICKY
+                    }
                 }
             }
         } catch (e: Throwable) {
@@ -264,6 +306,7 @@ class SudokuVpnService : VpnService() {
     companion object {
         const val EXTRA_NODE_ID = "nodeId"
         const val ACTION_STOP = "com.futaiii.sudodroid.vpn.STOP"
+        const val ACTION_SWITCH_NODE = "com.futaiii.sudodroid.vpn.SWITCH_NODE"
         private const val CHANNEL_ID = "sudoku_vpn"
         private const val NOTI_ID = 1
         private const val TAG = "SudokuVpnService"

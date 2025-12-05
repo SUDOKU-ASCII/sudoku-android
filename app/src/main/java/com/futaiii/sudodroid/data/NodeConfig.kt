@@ -15,6 +15,7 @@ data class NodeConfig(
     val asciiMode: AsciiMode = AsciiMode.PREFER_ENTROPY,
     @SerialName("aead")
     val aead: AeadMode = AeadMode.CHACHA20_POLY1305,
+    val enablePureDownlink: Boolean = true,
     val paddingMin: Int = 5,
     val paddingMax: Int = 15,
     val localPort: Int = 1080,

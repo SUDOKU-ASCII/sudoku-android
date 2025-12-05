@@ -4,9 +4,9 @@
 [![Latest Release](https://img.shields.io/github/v/release/saba-futai/sudoku-android?style=for-the-badge)](https://github.com/saba-futai/sudoku-android/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
-Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/saba-futai/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
+Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
-- Full node editor with validation, proxy modes (Global/Direct/PAC), padding tweaks, and optional Mieru downlink parameters.
+- Full node editor with validation, proxy modes (Global/Direct/PAC), padding tweaks, and a toggle for packed (bandwidth-optimized) downlink.
 - Import/export `sudoku://` short links, copy them straight into the clipboard, and rename nodes inline.
 - Foreground VPN service that starts the Go core, binds a local mixed proxy, and bridges the device TUN interface through `hev-socks5-tunnel`.
 - Built-in latency probes for each node (runs the thin Kotlin dialer without affecting the active tunnel).
@@ -55,7 +55,7 @@ Artifacts live in `app/build/outputs/apk/<variant>/`.
 
 - Sudoku tables are generated with a Go-compatible RNG and key normalization, so keys pasted from the Go CLI (private or public) produce matching tables.
 - The VPN service creates the VPN session, excludes the app itself from the VPN to avoid socket loops, and hands the TUN file descriptor to `hev-socks5-tunnel`.
-- Optional Mieru downlink toggles are exposed in the node editor; populate the port/credentials if your remote stack supports it.
+- Downlink mode (pure Sudoku vs. packed) is controlled via the node editor and matches the upstream `enable_pure_downlink` flag and `sudoku://` short link `x` field.
 
 ## Continuous integration
 

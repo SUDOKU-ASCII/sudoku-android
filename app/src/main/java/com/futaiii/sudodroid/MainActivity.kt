@@ -9,6 +9,7 @@ import androidx.activity.viewModels
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.ui.AppRoot
 import com.futaiii.sudodroid.ui.AppViewModel
 import com.futaiii.sudodroid.ui.AppViewModelFactory
@@ -33,6 +34,9 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onToggleVpn = { isRunning ->
                             if (isRunning) stopVpn() else startVpn()
+                        },
+                        onSwitchNodeWhileRunning = { node ->
+                            switchNode(node)
                         }
                     )
                 }
@@ -73,6 +77,15 @@ class MainActivity : ComponentActivity() {
         } else {
             startService(intent)
         }
+    }
+
+    private fun switchNode(node: NodeConfig) {
+        val intent = Intent(this, SudokuVpnService::class.java).apply {
+            action = SudokuVpnService.ACTION_SWITCH_NODE
+            putExtra(SudokuVpnService.EXTRA_NODE_ID, node.id)
+        }
+        // Service is already running in foreground; startService is sufficient.
+        startService(intent)
     }
 
     companion object {

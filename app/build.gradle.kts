@@ -5,6 +5,21 @@ plugins {
 }
 
 val isCi = System.getenv("CI") == "true"
+val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
+val tagVersionName: String? = gitRefName
+    ?.removePrefix("refs/tags/")
+    ?.removePrefix("v")
+val computedVersionName: String = tagVersionName ?: "0.1.0"
+
+fun computeVersionCodeFromName(name: String): Int {
+    val parts = name.split(".")
+    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    return major * 10000 + minor * 100 + patch
+}
+
+val computedVersionCode: Int = computeVersionCodeFromName(computedVersionName)
 
 android {
     namespace = "com.futaiii.sudodroid"
@@ -15,8 +30,8 @@ android {
         applicationId = "com.futaiii.sudodroid"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = computedVersionCode
+        versionName = computedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

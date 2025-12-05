@@ -97,17 +97,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Generate GitHub CI keystore
+      - name: Prepare signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          keytool -genkeypair -v \
-            -keystore github.keystore \
-            -storepass github \
-            -keypass github \
-            -alias github \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=GitHub CI, OU=CI, O=GitHub, L=Internet, S=Internet, C=US"
+          set -e
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > github.keystore
+            echo "Using persistent keystore from ANDROID_KEYSTORE_BASE64 secret."
+          else
+            echo "WARNING: ANDROID_KEYSTORE_BASE64 not set; generating ephemeral keystore (signatures will differ between runs)." >&2
+            keytool -genkeypair -v \
+              -keystore github.keystore \
+              -storepass github \
+              -keypass github \
+              -alias github \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=GitHub CI, OU=CI, O=GitHub, L=Internet, S=Internet, C=US"
+          fi
 
       - name: Build APK
         env:

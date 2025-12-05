@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
-SUDOKU_REPO="https://github.com/saba-futai/sudoku"
+SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
@@ -35,7 +35,6 @@ import (
 	"net"
 
 	"github.com/saba-futai/sudoku/internal/config"
-	"github.com/saba-futai/sudoku/internal/hybrid"
 	"github.com/saba-futai/sudoku/internal/tunnel"
 	"github.com/saba-futai/sudoku/pkg/geodata"
 	"github.com/saba-futai/sudoku/pkg/obfs/sudoku"
@@ -54,7 +53,9 @@ func (m *MobileInstance) Stop() {
 	if m.ln != nil {
 		m.ln.Close()
 	}
-	<-m.done
+	if m.done != nil {
+		<-m.done
+	}
 }
 
 func StartMobileClient(cfg *config.Config, table *sudoku.Table) (*MobileInstance, error) {
@@ -74,20 +75,8 @@ func StartMobileClient(cfg *config.Config, table *sudoku.Table) (*MobileInstance
 		PrivateKey: privateKeyBytes,
 	}
 
-	var dialer tunnel.Dialer
-	if cfg.EnableMieru {
-		mgr := hybrid.GetInstance(cfg)
-		if err := mgr.StartMieruClient(); err != nil {
-			return nil, fmt.Errorf("start mieru: %w", err)
-		}
-		dialer = &tunnel.HybridDialer{
-			BaseDialer: baseDialer,
-			Manager:    mgr,
-		}
-	} else {
-		dialer = &tunnel.StandardDialer{
-			BaseDialer: baseDialer,
-		}
+	dialer := &tunnel.StandardDialer{
+		BaseDialer: baseDialer,
 	}
 
 	// 2. GeoIP/PAC
@@ -119,15 +108,15 @@ func StartMobileClient(cfg *config.Config, table *sudoku.Table) (*MobileInstance
 					continue
 				}
 			}
-			go func() {
+			go func(conn net.Conn) {
 				defer func() {
 					if r := recover(); r != nil {
 						log.Printf("PANIC in handleMixedConn: %v", r)
 					}
 				}()
-				log.Printf("Accepted connection from %s", c.RemoteAddr())
-				handleMixedConn(c, cfg, table, geoMgr, dialer)
-			}()
+				log.Printf("Accepted connection from %s", conn.RemoteAddr())
+				handleMixedConn(conn, cfg, table, geoMgr, dialer)
+			}(c)
 		}
 	}()
 
@@ -170,9 +159,16 @@ func Start(jsonConfig string) error {
 		return fmt.Errorf("parse config: %w", err)
 	}
 
-	// Apply defaults
-	if cfg.Transport == "" { cfg.Transport = "tcp" }
-	if cfg.ASCII == "" { cfg.ASCII = "prefer_entropy" }
+	// Apply defaults similar to config.Load.
+	if cfg.Transport == "" {
+		cfg.Transport = "tcp"
+	}
+	if cfg.ASCII == "" {
+		cfg.ASCII = "prefer_entropy"
+	}
+	if !cfg.EnablePureDownlink && cfg.AEAD == "none" {
+		return fmt.Errorf("enable_pure_downlink=false requires AEAD to be enabled")
+	}
 
 	// Proxy Mode Logic
 	if len(cfg.RuleURLs) > 0 && (cfg.RuleURLs[0] == "global" || cfg.RuleURLs[0] == "direct") {
@@ -180,12 +176,11 @@ func Start(jsonConfig string) error {
 		cfg.RuleURLs = nil
 	} else if len(cfg.RuleURLs) > 0 {
 		cfg.ProxyMode = "pac"
-	} else if cfg.ProxyMode == "" {
-		cfg.ProxyMode = "global"
+	} else {
+		if cfg.ProxyMode == "" {
+			cfg.ProxyMode = "global"
+		}
 	}
-
-	// Normalize Mieru config exactly like CLI loader.
-	config.InitMieruconfig(&cfg)
 
 	table := sudoku.NewTable(cfg.Key, cfg.ASCII)
 	inst, err := app.StartMobileClient(&cfg, table)

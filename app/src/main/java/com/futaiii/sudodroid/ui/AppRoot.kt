@@ -92,8 +92,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
-import com.futaiii.sudodroid.data.MieruMultiplexing
-import com.futaiii.sudodroid.data.MieruTransport
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
@@ -104,7 +102,8 @@ import java.util.UUID
 @Composable
 fun AppRoot(
     viewModel: AppViewModel,
-    onToggleVpn: (Boolean) -> Unit
+    onToggleVpn: (Boolean) -> Unit,
+    onSwitchNodeWhileRunning: (NodeConfig) -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -192,7 +191,12 @@ fun AppRoot(
             } else {
                 NodeList(
                     nodes = state.nodes,
-                    onSelect = { viewModel.selectNode(it.id) },
+                    onSelect = {
+                        viewModel.selectNode(it.id)
+                        if (state.isVpnRunning) {
+                            onSwitchNodeWhileRunning(it)
+                        }
+                    },
                     onPing = { viewModel.pingNode(it) },
                     onEdit = {
                         editorInitial = it
@@ -405,12 +409,6 @@ private fun NodeCard(
                     icon = Icons.Outlined.WifiTethering,
                     label = "Pad ${nodeUi.node.paddingMin}-${nodeUi.node.paddingMax}%"
                 )
-                if (nodeUi.node.enableMieru && nodeUi.node.mieruPort != null) {
-                    InfoChip(
-                        icon = Icons.Outlined.WifiTethering,
-                        label = "Mieru ${nodeUi.node.mieruPort}"
-                    )
-                }
             }
             Divider()
             Row(
@@ -466,13 +464,7 @@ private fun NodeEditorDialog(
     var aeadMode by rememberSaveable { mutableStateOf(initial?.aead ?: AeadMode.CHACHA20_POLY1305) }
     var proxyMode by rememberSaveable { mutableStateOf(initial?.proxyMode ?: ProxyMode.GLOBAL) }
     var ruleUrls by rememberSaveable { mutableStateOf(initial?.ruleUrls?.joinToString("\n") ?: "") }
-    var enableMieru by rememberSaveable { mutableStateOf(initial?.enableMieru ?: false) }
-    var mieruPort by rememberSaveable { mutableStateOf(initial?.mieruPort?.toString().orEmpty()) }
-    var mieruTransport by rememberSaveable { mutableStateOf(initial?.mieruTransport ?: MieruTransport.TCP) }
-    var mieruMtu by rememberSaveable { mutableStateOf((initial?.mieruMtu ?: 1400).toString()) }
-    var mieruMultiplexing by rememberSaveable { mutableStateOf(initial?.mieruMultiplexing ?: MieruMultiplexing.HIGH) }
-    var mieruUsername by rememberSaveable { mutableStateOf(initial?.mieruUsername.orEmpty()) }
-    var mieruPassword by rememberSaveable { mutableStateOf(initial?.mieruPassword.orEmpty()) }
+    var enablePureDownlink by rememberSaveable { mutableStateOf(initial?.enablePureDownlink ?: true) }
     var shortLink by rememberSaveable { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
@@ -651,74 +643,24 @@ private fun NodeEditorDialog(
                         }
                     }
                     item {
-                        SectionCard(title = "Mieru (optional downlink)") {
+                        SectionCard(title = "Downlink") {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Switch(checked = enableMieru, onCheckedChange = { enableMieru = it })
-                                Text("Enable Mieru downlink")
-                            }
-                            if (enableMieru) {
-                                Spacer(Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    OutlinedTextField(
-                                        value = mieruPort,
-                                        onValueChange = { mieruPort = it.filter { ch: Char -> ch.isDigit() } },
-                                        label = { Text("Port") },
-                                        singleLine = true,
-                                        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    OutlinedTextField(
-                                        value = mieruMtu,
-                                        onValueChange = { mieruMtu = it.filter { ch: Char -> ch.isDigit() } },
-                                        label = { Text("MTU") },
-                                        singleLine = true,
-                                        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f)
+                                Switch(
+                                    checked = !enablePureDownlink,
+                                    onCheckedChange = { enablePureDownlink = !it }
+                                )
+                                Column {
+                                    Text("Bandwidth-optimized downlink")
+                                    Text(
+                                        "Uses packed downlink; requires AEAD.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
                                     )
                                 }
-                                Spacer(Modifier.height(8.dp))
-                                Text("Transport", style = MaterialTheme.typography.labelMedium)
-                                SingleChoiceSegmentedButtonRow {
-                                    MieruTransport.entries.forEachIndexed { index: Int, transport: MieruTransport ->
-                                        SegmentedButton(
-                                            selected = mieruTransport == transport,
-                                            onClick = { mieruTransport = transport },
-                                            shape = SegmentedButtonDefaults.itemShape(index, MieruTransport.entries.size),
-                                            label = { Text(transport.wireValue) }
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text("Multiplexing", style = MaterialTheme.typography.labelMedium)
-                                SingleChoiceSegmentedButtonRow {
-                                    MieruMultiplexing.entries.forEachIndexed { index: Int, level: MieruMultiplexing ->
-                                        SegmentedButton(
-                                            selected = mieruMultiplexing == level,
-                                            onClick = { mieruMultiplexing = level },
-                                            shape = SegmentedButtonDefaults.itemShape(index, MieruMultiplexing.entries.size),
-                                            label = { Text(level.wireValue) }
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = mieruUsername,
-                                    onValueChange = { mieruUsername = it },
-                                    label = { Text("Username (optional)") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = mieruPassword,
-                                    onValueChange = { mieruPassword = it },
-                                    label = { Text("Password (optional)") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
                             }
                         }
                     }
@@ -784,13 +726,7 @@ private fun NodeEditorDialog(
                                     aeadMode = aeadMode,
                                     proxyMode = proxyMode,
                                     ruleUrls = ruleUrls,
-                                    enableMieru = enableMieru,
-                                    mieruPort = mieruPort,
-                                    mieruTransport = mieruTransport,
-                                    mieruMtu = mieruMtu,
-                                    mieruMultiplexing = mieruMultiplexing,
-                                    mieruUsername = mieruUsername,
-                                    mieruPassword = mieruPassword
+                                    enablePureDownlink = enablePureDownlink
                                 )
                             }.getOrElse {
                                 errorText = it.message
@@ -820,13 +756,7 @@ private fun buildNodeConfig(
     aeadMode: AeadMode,
     proxyMode: ProxyMode,
     ruleUrls: String,
-    enableMieru: Boolean,
-    mieruPort: String,
-    mieruTransport: MieruTransport,
-    mieruMtu: String,
-    mieruMultiplexing: MieruMultiplexing,
-    mieruUsername: String,
-    mieruPassword: String
+    enablePureDownlink: Boolean
 ): NodeConfig {
     val parsedPort = port.toIntOrNull()?.takeIf { it in 1..65535 }
         ?: throw IllegalArgumentException("Invalid server port")
@@ -838,10 +768,6 @@ private fun buildNodeConfig(
     val sanitizedHost = host.trim()
     if (sanitizedHost.isBlank()) throw IllegalArgumentException("Host cannot be blank")
     if (key.trim().isEmpty()) throw IllegalArgumentException("Key cannot be blank")
-    val mieruPortValue = if (enableMieru) {
-        mieruPort.toIntOrNull()?.takeIf { it in 1..65535 }
-            ?: throw IllegalArgumentException("Invalid Mieru port")
-    } else null
     val sanitizedRuleUrls = ruleUrls.lines()
         .map { it.trim() }
         .filter { it.isNotEmpty() }
@@ -854,18 +780,12 @@ private fun buildNodeConfig(
         key = key.trim(),
         asciiMode = asciiMode,
         aead = aeadMode,
+        enablePureDownlink = enablePureDownlink,
         paddingMin = normalizedMin,
         paddingMax = normalizedMax,
         localPort = parsedLocalPort,
         proxyMode = proxyMode,
         ruleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList(),
-        enableMieru = enableMieru,
-        mieruPort = if (enableMieru) mieruPortValue else null,
-        mieruTransport = mieruTransport,
-        mieruMtu = mieruMtu.toIntOrNull() ?: 1400,
-        mieruMultiplexing = mieruMultiplexing,
-        mieruUsername = mieruUsername.ifBlank { null },
-        mieruPassword = mieruPassword.ifBlank { null },
         createdAt = initial?.createdAt ?: System.currentTimeMillis()
     )
 }
