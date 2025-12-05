@@ -2,40 +2,33 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
-
-    <!-- Scale down a bit so the icon fits better inside circular system masks (Pixel / Android 16). -->
-    <group
-        android:scaleX="0.75"
-        android:scaleY="0.75"
-        android:translateX="64"
-        android:translateY="64">
-
-        <!-- 中心红色主球体（从 logo.svg 等比缩放并平移） -->
-        <path
-            android:fillColor="#ff6b6b"
-            android:pathData="M243.36,243.36m-62.4,0a62.4,62.4 0,1 1 124.8,0a62.4,62.4 0,1 1 -124.8,0" />
-
-        <!-- 轨道路径（对应两条弧线） -->
-        <path
-            android:pathData="M121.68,243.36 A121.68,121.68 0,0 1 365.04,243.36"
-            android:strokeColor="#ff6b6b"
-            android:strokeWidth="27.3"
-            android:strokeLineCap="round"
-            android:fillColor="@android:color/transparent" />
-
-        <path
-            android:pathData="M365.04,243.36 A121.68,121.68 0,0 1 184.08,340.08"
-            android:strokeColor="#ff6b6b"
-            android:strokeWidth="27.3"
-            android:strokeLineCap="round"
-            android:fillColor="@android:color/transparent"
-            android:strokeAlpha="0.5" />
-
-        <!-- 小卫星球体 -->
-        <path
-            android:fillColor="#ee5253"
-            android:pathData="M365.04,243.36m-23.4,0a23.4,23.4 0,1 1 46.8,0a23.4,23.4 0,1 1 -46.8,0" />
-    </group>
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Paper airplane from logo.svg, scaled to fit 108dp adaptive icon viewport -->
+    <!-- Safe zone is 66dp centered, so we position the airplane accordingly -->
+    
+    <!-- Paper airplane - blue body (#5BCEFA) -->
+    <path 
+        android:fillColor="#5BCEFA"
+        android:pathData="M23.5,54L88.5,25.5L59.4,90.5L48.9,63.2L23.5,54Z"/>
+    
+    <!-- Paper airplane - white highlight -->
+    <path 
+        android:fillColor="#FFFFFF"
+        android:pathData="M88.5,25.5L48.9,63.2L74.2,67.4L88.5,25.5Z"/>
+    
+    <!-- Speed trails / 尾迹 -->
+    <path 
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M17,73.5L38,67.2"/>
+    <path 
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M13,58.8L21.4,56.7"/>
 </vector>

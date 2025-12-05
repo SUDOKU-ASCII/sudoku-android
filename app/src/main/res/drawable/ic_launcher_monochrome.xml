@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Monochrome paper airplane silhouette for Android 13+ Material You themed icons -->
+    <path 
+        android:fillColor="#000000"
+        android:pathData="M23.5,54L88.5,25.5L59.4,90.5L48.9,63.2L23.5,54Z"/>
+    <path 
+        android:fillColor="#000000"
+        android:fillAlpha="0.5"
+        android:pathData="M88.5,25.5L48.9,63.2L74.2,67.4L88.5,25.5Z"/>
+</vector>

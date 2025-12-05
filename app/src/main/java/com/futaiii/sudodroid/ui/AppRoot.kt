@@ -495,6 +495,40 @@ private fun NodeEditorDialog(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Short link import moved to top for easier access
+                    item {
+                        SectionCard(title = "Quick Import") {
+                            OutlinedTextField(
+                                value = shortLink,
+                                onValueChange = { shortLink = it },
+                                label = { Text("sudoku:// link") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        clipboard.getText()?.let { shortLink = it.text.trim() }
+                                    }) {
+                                        Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
+                                    }
+                                }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    val trimmed = shortLink.trim()
+                                    if (trimmed.isNotEmpty()) {
+                                        val linkToImport = if (trimmed.startsWith("sudoku://")) trimmed else "sudoku://$trimmed"
+                                        onImportLink(linkToImport, name.takeIf { it.isNotBlank() })
+                                    }
+                                },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Icon(Icons.Default.Link, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Import Short Link")
+                            }
+                        }
+                    }
                     item {
                         SectionCard(title = "Connection") {
                             OutlinedTextField(
@@ -661,38 +695,6 @@ private fun NodeEditorDialog(
                                         fontSize = 12.sp
                                     )
                                 }
-                            }
-                        }
-                    }
-                    item {
-                        SectionCard(title = "Short link import") {
-                            OutlinedTextField(
-                                value = shortLink,
-                                onValueChange = { shortLink = it },
-                                label = { Text("sudoku:// link") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                trailingIcon = {
-                                    IconButton(onClick = {
-                                        clipboard.getText()?.let { shortLink = it.text.trim() }
-                                    }) {
-                                        Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
-                                    }
-                                }
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Button(
-                                onClick = {
-                                    val trimmed = shortLink.trim()
-                                    if (trimmed.isNotEmpty()) {
-                                        // Auto-add prefix if missing for better UX, though Codec handles it too
-                                        val linkToImport = if (trimmed.startsWith("sudoku://")) trimmed else "sudoku://$trimmed"
-                                        onImportLink(linkToImport, name.takeIf { it.isNotBlank() })
-                                    }
-                                },
-                                modifier = Modifier.align(Alignment.End)
-                            ) {
-                                Text("Import")
                             }
                         }
                     }
