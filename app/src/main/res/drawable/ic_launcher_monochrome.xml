@@ -2,15 +2,44 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="512"
+    android:viewportHeight="512">
     
-    <!-- Monochrome paper airplane silhouette for Android 13+ Material You themed icons -->
-    <path 
-        android:fillColor="#000000"
-        android:pathData="M23.5,54L88.5,25.5L59.4,90.5L48.9,63.2L23.5,54Z"/>
-    <path 
-        android:fillColor="#000000"
-        android:fillAlpha="0.5"
-        android:pathData="M88.5,25.5L48.9,63.2L74.2,67.4L88.5,25.5Z"/>
+    <group
+        android:translateX="38"
+        android:translateY="38"
+        android:scaleX="0.85"
+        android:scaleY="0.85"
+        android:rotation="10"
+        android:pivotX="256"
+        android:pivotY="256">
+        
+        <!-- Scarf part 1 (Back) -->
+        <path
+            android:pathData="M290 230C290 230 370 200 400 240"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="25"
+            android:strokeLineCap="round"/>
+
+        <!-- Body -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M256 190L370 440L256 410L142 440L256 190Z"/>
+        
+        <!-- Scarf part 2 (Front) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M226,215 L286,215 A20,20 0 0 1 306,235 A20,20 0 0 1 286,255 L226,255 A20,20 0 0 1 206,235 A20,20 0 0 1 226,215 Z"/>
+        
+        <!-- Head with Eyes cut out (EvenOdd) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="
+                M256,65 A85,85 0 0 1 256,235 A85,85 0 0 1 256,65 Z
+                M218,139 A16,16 0 0 1 218,171 A16,16 0 0 1 218,139 Z
+                M294,139 A16,16 0 0 1 294,171 A16,16 0 0 1 294,139 Z
+            "/>
+            
+    </group>
 </vector>

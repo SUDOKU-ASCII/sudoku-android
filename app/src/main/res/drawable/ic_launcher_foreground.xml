@@ -2,33 +2,64 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="512"
+    android:viewportHeight="512">
     
-    <!-- Paper airplane from logo.svg, scaled to fit 108dp adaptive icon viewport -->
-    <!-- Safe zone is 66dp centered, so we position the airplane accordingly -->
-    
-    <!-- Paper airplane - blue body (#5BCEFA) -->
-    <path 
-        android:fillColor="#5BCEFA"
-        android:pathData="M23.5,54L88.5,25.5L59.4,90.5L48.9,63.2L23.5,54Z"/>
-    
-    <!-- Paper airplane - white highlight -->
-    <path 
-        android:fillColor="#FFFFFF"
-        android:pathData="M88.5,25.5L48.9,63.2L74.2,67.4L88.5,25.5Z"/>
-    
-    <!-- Speed trails / 尾迹 -->
-    <path 
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="4.2"
-        android:strokeLineCap="round"
-        android:fillColor="@android:color/transparent"
-        android:pathData="M17,73.5L38,67.2"/>
-    <path 
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="4.2"
-        android:strokeLineCap="round"
-        android:fillColor="@android:color/transparent"
-        android:pathData="M13,58.8L21.4,56.7"/>
+    <group
+        android:translateX="38"
+        android:translateY="38"
+        android:scaleX="0.85"
+        android:scaleY="0.85"
+        android:rotation="10"
+        android:pivotX="256"
+        android:pivotY="256">
+        
+        <!-- Scarf part 1 (Back) -->
+        <path
+            android:pathData="M290 230C290 230 370 200 400 240"
+            android:strokeColor="#F5A9B8"
+            android:strokeWidth="25"
+            android:strokeLineCap="round"/>
+
+        <!-- Body -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M256 190L370 440L256 410L142 440L256 190Z"/>
+        
+        <!-- Body Fold -->
+        <path
+            android:strokeColor="#5BCEFA"
+            android:strokeWidth="2"
+            android:strokeAlpha="0.1"
+            android:pathData="M256 190L256 410"/>
+        
+        <!-- Scarf part 2 (Front) - Capsule: x=206 y=215 w=100 h=40 rx=20 -->
+        <path
+            android:fillColor="#F5A9B8"
+            android:pathData="M226,215 L286,215 A20,20 0 0 1 306,235 A20,20 0 0 1 286,255 L226,255 A20,20 0 0 1 206,235 A20,20 0 0 1 226,215 Z"/>
+        
+        <!-- Head - Circle: cx=256 cy=150 r=85 -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M256,65 A85,85 0 0 1 256,235 A85,85 0 0 1 256,65 Z"/>
+        
+        <!-- Eyes - Circles -->
+        <path
+            android:fillColor="#000000"
+            android:pathData="M218,139 A16,16 0 0 1 218,171 A16,16 0 0 1 218,139 Z"/>
+        <path
+            android:fillColor="#000000"
+            android:pathData="M294,139 A16,16 0 0 1 294,171 A16,16 0 0 1 294,139 Z"/>
+            
+        <!-- Blush - Circles with opacity -->
+        <path
+            android:fillColor="#F5A9B8"
+            android:fillAlpha="0.5"
+            android:pathData="M205,165 A10,10 0 0 1 205,185 A10,10 0 0 1 205,165 Z"/>
+        <path
+            android:fillColor="#F5A9B8"
+            android:fillAlpha="0.5"
+            android:pathData="M307,165 A10,10 0 0 1 307,185 A10,10 0 0 1 307,165 Z"/>
+            
+    </group>
 </vector>

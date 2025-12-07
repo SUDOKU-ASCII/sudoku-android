@@ -1,12 +1,36 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- 背景容器 -->
-    <rect width="512" height="512" rx="115" fill="#F5A9B8"/>
+    <!-- 背景：浅蓝色 (MTF Blue) -->
+    <rect width="512" height="512" rx="115" fill="#5BCEFA"/>
     
-    <!-- 纸飞机 -->
-    <path d="M110 256L420 120L280 430L230 300L110 256Z" fill="#5BCEFA"/>
-    <path d="M420 120L230 300L350 320L420 120Z" fill="#FFFFFF"/>
-    
-    <!-- 尾迹/速度线 -->
-    <path d="M80 350L180 320" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
-    <path d="M60 280L100 270" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+    <!-- 整体组合：
+         1. translate(38,38) scale(0.85) -> 整体缩小至85%并保持居中
+         2. rotate(10, 256, 256) -> 保持10度倾斜 
+    -->
+    <g transform="translate(38, 38) scale(0.85) rotate(10, 256, 256)">
+        
+        <!-- 围巾飘带 (位于身体后方) -->
+        <!-- 颜色改为粉色，位置稍微下移以匹配围巾高度 -->
+        <path d="M290 230C290 230 370 200 400 240" stroke="#F5A9B8" stroke-width="25" stroke-linecap="round"/>
+
+        <!-- 身体：羽毛球/折纸造型 -->
+        <path d="M256 190L370 440L256 410L142 440L256 190Z" fill="#FFFFFF"/>
+        
+        <!-- 身体折痕细节 -->
+        <path d="M256 190L256 410" stroke="#5BCEFA" stroke-width="2" stroke-opacity="0.1"/>
+        
+        <!-- 围巾：浅粉色 (MTF Pink) -->
+        <!-- 调整：Y轴下移至215 (原195)，宽度减少至100 (原140)，X轴相应居中 -->
+        <rect x="206" y="215" width="100" height="40" rx="20" fill="#F5A9B8"/>
+        
+        <!-- 头部：纯白圆形 -->
+        <circle cx="256" cy="150" r="85" fill="#FFFFFF"/>
+        
+        <!-- 大眼睛：黑色 -->
+        <circle cx="218" cy="155" r="16" fill="#000000"/>
+        <circle cx="294" cy="155" r="16" fill="#000000"/>
+        
+        <!-- 腮红 -->
+        <circle cx="205" cy="175" r="10" fill="#F5A9B8" fill-opacity="0.5"/>
+        <circle cx="307" cy="175" r="10" fill="#F5A9B8" fill-opacity="0.5"/>
+    </g>
 </svg>
