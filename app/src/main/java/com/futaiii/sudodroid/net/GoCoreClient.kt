@@ -76,6 +76,7 @@ object GoCoreClient {
             paddingMax = node.paddingMax,
             ruleUrls = ruleUrls,
             ascii = node.asciiMode.wireValue,
+            customTable = node.customTable,
             enablePureDownlink = node.enablePureDownlink,
             disableHttpMask = false,
             proxyMode = proxyMode
@@ -96,6 +97,7 @@ object GoCoreClient {
         @SerialName("padding_max") val paddingMax: Int,
         @SerialName("rule_urls") val ruleUrls: List<String> = emptyList(),
         val ascii: String,
+        @SerialName("custom_table") val customTable: String = "",
         @SerialName("enable_pure_downlink") val enablePureDownlink: Boolean = true,
         @SerialName("disable_http_mask") val disableHttpMask: Boolean = false,
         @SerialName("proxy_mode") val proxyMode: String

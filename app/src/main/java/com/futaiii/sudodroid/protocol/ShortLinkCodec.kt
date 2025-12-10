@@ -44,7 +44,8 @@ object ShortLinkCodec {
             enablePureDownlink = enablePureDownlink,
             localPort = local,
             proxyMode = ProxyMode.PAC,
-            ruleUrls = defaultRuleUrls
+            ruleUrls = defaultRuleUrls,
+            customTable = payload.customTable.orEmpty()
         )
     }
 
@@ -57,7 +58,8 @@ object ShortLinkCodec {
             ascii = encodeAscii(node.asciiMode),
             aead = node.aead.wireName,
             mixPort = node.localPort,
-            packedDownlink = !node.enablePureDownlink
+            packedDownlink = !node.enablePureDownlink,
+            customTable = node.customTable.takeIf { it.isNotBlank() }
         )
         val data = json.encodeToString(Payload.serializer(), payload)
         val encoded = Base64.encodeToString(
@@ -75,7 +77,8 @@ object ShortLinkCodec {
         @SerialName("a") val ascii: String? = null,
         @SerialName("e") val aead: String? = null,
         @SerialName("m") val mixPort: Int? = null,
-        @SerialName("x") val packedDownlink: Boolean? = null
+        @SerialName("x") val packedDownlink: Boolean? = null,
+        @SerialName("t") val customTable: String? = null
     )
 }
 

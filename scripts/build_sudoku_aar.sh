@@ -58,8 +58,14 @@ func (m *MobileInstance) Stop() {
 	}
 }
 
-func StartMobileClient(cfg *config.Config, table *sudoku.Table) (*MobileInstance, error) {
-	// 1. Initialize Dialer
+func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
+	// 1. Build initial table honoring custom layout.
+	table, err := sudoku.NewTableWithCustom(cfg.Key, cfg.ASCII, cfg.CustomTable)
+	if err != nil {
+		return nil, fmt.Errorf("build table: %w", err)
+	}
+
+	// 2. Initialize Dialer (may derive public key and rebuild table).
 	privateKeyBytes, updatedTable, changed, err := normalizeClientKey(cfg, table)
 	if err != nil {
 		return nil, fmt.Errorf("process key: %w", err)
@@ -79,13 +85,13 @@ func StartMobileClient(cfg *config.Config, table *sudoku.Table) (*MobileInstance
 		BaseDialer: baseDialer,
 	}
 
-	// 2. GeoIP/PAC
+	// 3. GeoIP/PAC
 	var geoMgr *geodata.Manager
 	if cfg.ProxyMode == "pac" {
 		geoMgr = geodata.GetInstance(cfg.RuleURLs)
 	}
 
-	// 3. Listen
+	// 4. Listen
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.LocalPort))
 	if err != nil {
 		return nil, fmt.Errorf("listen: %w", err)
@@ -94,7 +100,7 @@ func StartMobileClient(cfg *config.Config, table *sudoku.Table) (*MobileInstance
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	
+
 	go func() {
 		defer close(done)
 		defer ln.Close()
@@ -137,7 +143,6 @@ import (
 
 	"github.com/saba-futai/sudoku/internal/app"
 	"github.com/saba-futai/sudoku/internal/config"
-	"github.com/saba-futai/sudoku/pkg/obfs/sudoku"
 )
 
 var (
@@ -182,8 +187,7 @@ func Start(jsonConfig string) error {
 		}
 	}
 
-	table := sudoku.NewTable(cfg.Key, cfg.ASCII)
-	inst, err := app.StartMobileClient(&cfg, table)
+	inst, err := app.StartMobileClient(&cfg)
 	if err != nil {
 		return err
 	}

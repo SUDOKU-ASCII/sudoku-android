@@ -461,6 +461,7 @@ private fun NodeEditorDialog(
     var paddingMin by rememberSaveable { mutableStateOf((initial?.paddingMin ?: 5).toString()) }
     var paddingMax by rememberSaveable { mutableStateOf((initial?.paddingMax ?: 15).toString()) }
     var asciiMode by rememberSaveable { mutableStateOf(initial?.asciiMode ?: AsciiMode.PREFER_ENTROPY) }
+    var customTable by rememberSaveable { mutableStateOf(initial?.customTable.orEmpty()) }
     var aeadMode by rememberSaveable { mutableStateOf(initial?.aead ?: AeadMode.CHACHA20_POLY1305) }
     var proxyMode by rememberSaveable { mutableStateOf(initial?.proxyMode ?: ProxyMode.GLOBAL) }
     var ruleUrls by rememberSaveable { mutableStateOf(initial?.ruleUrls?.joinToString("\n") ?: "") }
@@ -630,6 +631,14 @@ private fun NodeEditorDialog(
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = customTable,
+                                onValueChange = { customTable = it },
+                                label = { Text("Custom table (optional, e.g. xpxvvpvv)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OutlinedTextField(
                                     value = paddingMin,
@@ -728,6 +737,7 @@ private fun NodeEditorDialog(
                                     aeadMode = aeadMode,
                                     proxyMode = proxyMode,
                                     ruleUrls = ruleUrls,
+                                    customTable = customTable,
                                     enablePureDownlink = enablePureDownlink
                                 )
                             }.getOrElse {
@@ -758,7 +768,8 @@ private fun buildNodeConfig(
     aeadMode: AeadMode,
     proxyMode: ProxyMode,
     ruleUrls: String,
-    enablePureDownlink: Boolean
+    enablePureDownlink: Boolean,
+    customTable: String
 ): NodeConfig {
     val parsedPort = port.toIntOrNull()?.takeIf { it in 1..65535 }
         ?: throw IllegalArgumentException("Invalid server port")
@@ -788,6 +799,7 @@ private fun buildNodeConfig(
         localPort = parsedLocalPort,
         proxyMode = proxyMode,
         ruleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList(),
+        customTable = customTable.trim(),
         createdAt = initial?.createdAt ?: System.currentTimeMillis()
     )
 }

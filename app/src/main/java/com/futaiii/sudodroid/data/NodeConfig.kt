@@ -13,6 +13,8 @@ data class NodeConfig(
     val key: String = "",
     @SerialName("ascii")
     val asciiMode: AsciiMode = AsciiMode.PREFER_ENTROPY,
+    @SerialName("custom_table")
+    val customTable: String = "",
     @SerialName("aead")
     val aead: AeadMode = AeadMode.CHACHA20_POLY1305,
     val enablePureDownlink: Boolean = true,
