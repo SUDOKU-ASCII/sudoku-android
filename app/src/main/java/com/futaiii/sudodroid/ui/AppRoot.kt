@@ -461,7 +461,12 @@ private fun NodeEditorDialog(
     var paddingMin by rememberSaveable { mutableStateOf((initial?.paddingMin ?: 5).toString()) }
     var paddingMax by rememberSaveable { mutableStateOf((initial?.paddingMax ?: 15).toString()) }
     var asciiMode by rememberSaveable { mutableStateOf(initial?.asciiMode ?: AsciiMode.PREFER_ENTROPY) }
-    var customTable by rememberSaveable { mutableStateOf(initial?.customTable.orEmpty()) }
+    var customTablesText by rememberSaveable {
+        mutableStateOf(
+            initial?.customTables?.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                ?: initial?.customTable.orEmpty()
+        )
+    }
     var aeadMode by rememberSaveable { mutableStateOf(initial?.aead ?: AeadMode.CHACHA20_POLY1305) }
     var proxyMode by rememberSaveable { mutableStateOf(initial?.proxyMode ?: ProxyMode.GLOBAL) }
     var ruleUrls by rememberSaveable { mutableStateOf(initial?.ruleUrls?.joinToString("\n") ?: "") }
@@ -632,11 +637,11 @@ private fun NodeEditorDialog(
                             }
                             Spacer(Modifier.height(12.dp))
                             OutlinedTextField(
-                                value = customTable,
-                                onValueChange = { customTable = it },
-                                label = { Text("Custom table (optional, e.g. xpxvvpvv)") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
+                                value = customTablesText,
+                                onValueChange = { customTablesText = it },
+                                label = { Text("Custom tables (optional, one per line; enables xvp rotation)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -737,7 +742,7 @@ private fun NodeEditorDialog(
                                     aeadMode = aeadMode,
                                     proxyMode = proxyMode,
                                     ruleUrls = ruleUrls,
-                                    customTable = customTable,
+                                    customTablesText = customTablesText,
                                     enablePureDownlink = enablePureDownlink
                                 )
                             }.getOrElse {
@@ -769,7 +774,7 @@ private fun buildNodeConfig(
     proxyMode: ProxyMode,
     ruleUrls: String,
     enablePureDownlink: Boolean,
-    customTable: String
+    customTablesText: String
 ): NodeConfig {
     val parsedPort = port.toIntOrNull()?.takeIf { it in 1..65535 }
         ?: throw IllegalArgumentException("Invalid server port")
@@ -785,6 +790,9 @@ private fun buildNodeConfig(
         .map { it.trim() }
         .filter { it.isNotEmpty() }
 
+    val customTables = parseCustomTablePatterns(customTablesText)
+    customTables.forEach { validateCustomTablePattern(it) }
+
     return NodeConfig(
         id = initial?.id ?: UUID.randomUUID().toString(),
         name = name.ifBlank { sanitizedHost },
@@ -799,9 +807,34 @@ private fun buildNodeConfig(
         localPort = parsedLocalPort,
         proxyMode = proxyMode,
         ruleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList(),
-        customTable = customTable.trim(),
+        customTable = customTables.firstOrNull().orEmpty(),
+        customTables = customTables,
         createdAt = initial?.createdAt ?: System.currentTimeMillis()
     )
+}
+
+private fun parseCustomTablePatterns(raw: String): List<String> {
+    return raw
+        .trim()
+        .split(Regex("[\\s,;]+"))
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+}
+
+private fun validateCustomTablePattern(pattern: String) {
+    val p = pattern.trim().lowercase()
+    if (p.isEmpty()) return
+    if (p.length != 8) {
+        throw IllegalArgumentException("Custom table must be 8 chars (got ${p.length}): $pattern")
+    }
+    val allowed = setOf('x', 'p', 'v')
+    if (p.any { it !in allowed }) {
+        throw IllegalArgumentException("Custom table must only contain x/p/v: $pattern")
+    }
+    val counts = p.groupingBy { it }.eachCount()
+    if (counts.getOrDefault('x', 0) != 2 || counts.getOrDefault('p', 0) != 2 || counts.getOrDefault('v', 0) != 4) {
+        throw IllegalArgumentException("Custom table must contain 2x, 2p, 4v: $pattern")
+    }
 }
 
 @Composable

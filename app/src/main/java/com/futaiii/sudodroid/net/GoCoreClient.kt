@@ -67,6 +67,16 @@ object GoCoreClient {
         } else {
             emptyList()
         }
+
+        val normalizedCustomTables = node.customTables
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        val primaryCustomTable = normalizedCustomTables.firstOrNull()
+            ?: node.customTable.trim().takeIf { it.isNotEmpty() }
+        val customTables = if (normalizedCustomTables.isNotEmpty()) normalizedCustomTables else {
+            primaryCustomTable?.let { listOf(it) } ?: emptyList()
+        }
+
         val config = GoCoreConfig(
             localPort = node.localPort,
             serverAddress = serverAddress,
@@ -76,7 +86,8 @@ object GoCoreClient {
             paddingMax = node.paddingMax,
             ruleUrls = ruleUrls,
             ascii = node.asciiMode.wireValue,
-            customTable = node.customTable,
+            customTable = primaryCustomTable.orEmpty(),
+            customTables = customTables,
             enablePureDownlink = node.enablePureDownlink,
             disableHttpMask = false,
             proxyMode = proxyMode
@@ -98,6 +109,7 @@ object GoCoreClient {
         @SerialName("rule_urls") val ruleUrls: List<String> = emptyList(),
         val ascii: String,
         @SerialName("custom_table") val customTable: String = "",
+        @SerialName("custom_tables") val customTables: List<String> = emptyList(),
         @SerialName("enable_pure_downlink") val enablePureDownlink: Boolean = true,
         @SerialName("disable_http_mask") val disableHttpMask: Boolean = false,
         @SerialName("proxy_mode") val proxyMode: String

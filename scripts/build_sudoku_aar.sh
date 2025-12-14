@@ -4,14 +4,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
+SUDOKU_REF="${SUDOKU_REF:-v0.0.9}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
+GOMOBILE_BIN="${GOMOBILE_BIN:-gomobile}"
 
 # Ensure gomobile is installed
-if ! command -v gomobile >/dev/null 2>&1; then
-  echo "gomobile not found. Please install it first."
-  exit 1
+if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
+  fallback="$(go env GOPATH 2>/dev/null)/bin/gomobile"
+  if [[ -x "${fallback}" ]]; then
+    GOMOBILE_BIN="${fallback}"
+  else
+    echo "gomobile not found. Please install it first (or set GOMOBILE_BIN)."
+    exit 1
+  fi
 fi
 
 # Cleanup and Prep
@@ -19,8 +26,8 @@ rm -rf "${WORK_DIR}"
 mkdir -p "${WORK_DIR}"
 
 # Clone sudoku
-echo "Cloning sudoku..."
-git clone "${SUDOKU_REPO}" "${SUDOKU_DIR}"
+echo "Cloning sudoku (${SUDOKU_REF})..."
+git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"
 
 # Inject Mobile Client Implementation into internal/app
 # This allows access to unexported functions like normalizeClientKey and handleMixedConn
@@ -59,25 +66,24 @@ func (m *MobileInstance) Stop() {
 }
 
 func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
-	// 1. Build initial table honoring custom layout.
-	table, err := sudoku.NewTableWithCustom(cfg.Key, cfg.ASCII, cfg.CustomTable)
-	if err != nil {
-		return nil, fmt.Errorf("build table: %w", err)
-	}
-
-	// 2. Initialize Dialer (may derive public key and rebuild table).
-	privateKeyBytes, updatedTable, changed, err := normalizeClientKey(cfg, table)
+	// 1. Normalize key (may derive public key).
+	privateKeyBytes, changed, err := normalizeClientKey(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("process key: %w", err)
 	}
 	if changed {
-		table = updatedTable
 		log.Printf("Derived Public Key: %s", cfg.Key)
+	}
+
+	// 2. Build one or more tables (supports custom_tables rotation).
+	tables, err := buildTablesFromConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("build table(s): %w", err)
 	}
 
 	baseDialer := tunnel.BaseDialer{
 		Config:     cfg,
-		Table:      table,
+		Tables:     tables,
 		PrivateKey: privateKeyBytes,
 	}
 
@@ -101,6 +107,11 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
+	var primaryTable *sudoku.Table
+	if len(tables) > 0 {
+		primaryTable = tables[0]
+	}
+
 	go func() {
 		defer close(done)
 		defer ln.Close()
@@ -121,7 +132,9 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 					}
 				}()
 				log.Printf("Accepted connection from %s", conn.RemoteAddr())
-				handleMixedConn(conn, cfg, table, geoMgr, dialer)
+				// handleMixedConn takes a primary table for legacy helpers;
+				// the dialer itself performs per-connection table rotation.
+				handleMixedConn(conn, cfg, primaryTable, geoMgr, dialer)
 			}(c)
 		}
 	}()
@@ -210,7 +223,7 @@ echo "Building AAR..."
 mkdir -p "$(dirname "${OUT_AAR}")"
 pushd "${SUDOKU_DIR}" >/dev/null
 go get -d golang.org/x/mobile/bind
-gomobile bind \
+"${GOMOBILE_BIN}" bind \
   -target=android/arm64,android/amd64 \
   -androidapi "${ANDROID_API_LEVEL}" \
   -javapkg com.futaiii.sudoku \

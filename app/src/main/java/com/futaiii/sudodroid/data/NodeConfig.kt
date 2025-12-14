@@ -15,6 +15,8 @@ data class NodeConfig(
     val asciiMode: AsciiMode = AsciiMode.PREFER_ENTROPY,
     @SerialName("custom_table")
     val customTable: String = "",
+    @SerialName("custom_tables")
+    val customTables: List<String> = emptyList(),
     @SerialName("aead")
     val aead: AeadMode = AeadMode.CHACHA20_POLY1305,
     val enablePureDownlink: Boolean = true,

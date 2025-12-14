@@ -33,6 +33,8 @@ object ShortLinkCodec {
         }
         val local = if (payload.mixPort == null || payload.mixPort == 0) 1080 else payload.mixPort
         val enablePureDownlink = payload.packedDownlink?.let { !it } ?: true
+        val primaryCustomTable = payload.customTable?.trim().orEmpty()
+        val customTables = primaryCustomTable.takeIf { it.isNotEmpty() }?.let { listOf(it) } ?: emptyList()
 
         return NodeConfig(
             name = payload.host,
@@ -45,12 +47,15 @@ object ShortLinkCodec {
             localPort = local,
             proxyMode = ProxyMode.PAC,
             ruleUrls = defaultRuleUrls,
-            customTable = payload.customTable.orEmpty()
+            customTable = primaryCustomTable,
+            customTables = customTables
         )
     }
 
     fun toLink(node: NodeConfig, advertiseHost: String? = null): String {
         val host = advertiseHost ?: node.host
+        val primaryCustomTable = node.customTables.firstOrNull()?.trim().orEmpty()
+            .ifEmpty { node.customTable.trim() }
         val payload = Payload(
             host = host,
             port = node.port,
@@ -59,7 +64,7 @@ object ShortLinkCodec {
             aead = node.aead.wireName,
             mixPort = node.localPort,
             packedDownlink = !node.enablePureDownlink,
-            customTable = node.customTable.takeIf { it.isNotBlank() }
+            customTable = primaryCustomTable.takeIf { it.isNotBlank() }
         )
         val data = json.encodeToString(Payload.serializer(), payload)
         val encoded = Base64.encodeToString(
