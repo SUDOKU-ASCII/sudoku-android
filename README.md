@@ -47,7 +47,7 @@ git submodule update --init --recursive   # or git clone https://github.com/heih
 During `preBuild`, Gradle will:
 
 1. Ensure `third_party/hev-socks5-tunnel` (and its submodules) are present.
-2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: `v0.1.0`), executes `gomobile bind -target=android/arm64,android/amd64 ./pkg/mobile`, and drops the AAR into `app/libs/`.
+2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: `v0.1.1`), executes `gomobile bind -target=android/arm64,android/amd64 ./pkg/mobile`, and drops the AAR into `app/libs/`.
 
 Artifacts live in `app/build/outputs/apk/<variant>/`.
 

@@ -85,7 +85,7 @@ enum class ProxyMode(val wireValue: String, val label: String) {
 @Serializable
 enum class IpMode(val label: String) {
     @SerialName("default")
-    DEFAULT("Auto"),
+    DEFAULT("Default (IPv4)"),
     @SerialName("ipv4_only")
     IPV4_ONLY("IPv4 only"),
     @SerialName("ipv6_preferred")

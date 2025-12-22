@@ -19,7 +19,7 @@ object ServerAddressResolver {
         val port = node.port
         val isLiteral = isIpv4Literal(host) || isIpv6Literal(host)
 
-        if (node.ipMode == IpMode.DEFAULT || isLiteral) {
+        if (isLiteral) {
             return ResolvedServerAddress(
                 host = host,
                 port = port,
@@ -33,16 +33,18 @@ object ServerAddressResolver {
         val ipv6 = addresses.filterIsInstance<Inet6Address>()
 
         val picked = when (node.ipMode) {
+            // Keep "Default" aligned with what most users expect from other clients:
+            // prefer IPv4 when available, otherwise fall back to IPv6.
+            IpMode.DEFAULT -> ipv4.firstOrNull() ?: ipv6.firstOrNull()
             IpMode.IPV4_ONLY -> ipv4.firstOrNull()
             IpMode.IPV6_PREFERRED -> ipv6.firstOrNull() ?: ipv4.firstOrNull()
-            IpMode.DEFAULT -> null
         }
 
         val selected = picked ?: throw IllegalStateException(
             when (node.ipMode) {
+                IpMode.DEFAULT -> "No IPv4/IPv6 address found for $host"
                 IpMode.IPV4_ONLY -> "No IPv4 address found for $host"
                 IpMode.IPV6_PREFERRED -> "No IPv4/IPv6 address found for $host"
-                IpMode.DEFAULT -> "No address found for $host"
             }
         )
 
