@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
+import com.futaiii.sudodroid.net.ServerAddressResolver
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -138,7 +139,8 @@ class AppViewModel(
                 socket.tcpNoDelay = true
                 // Connect to the server port. If using proxy, this tests Client -> Proxy -> Server.
                 // If direct, this tests Client -> Server.
-                socket.connect(java.net.InetSocketAddress(node.host, node.port), 5_000)
+                val resolved = ServerAddressResolver.resolve(node)
+                socket.connect(java.net.InetSocketAddress(resolved.host, resolved.port), 5_000)
                 socket.close()
                 kotlin.math.abs((System.nanoTime() - start) / 1_000_000L)
             }.getOrNull()

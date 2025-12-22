@@ -92,6 +92,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
+import com.futaiii.sudodroid.data.HttpMaskMode
+import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
@@ -359,7 +361,7 @@ private fun NodeCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        "${nodeUi.node.host}:${nodeUi.node.port}",
+                        formatHostPort(nodeUi.node.host, nodeUi.node.port),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -445,6 +447,15 @@ private fun InfoChip(icon: ImageVector, label: String) {
     )
 }
 
+private fun formatHostPort(host: String, port: Int): String {
+    val sanitized = host.trim().removeSurrounding("[", "]")
+    return if (sanitized.contains(":")) {
+        "[$sanitized]:$port"
+    } else {
+        "$sanitized:$port"
+    }
+}
+
 @Composable
 private fun NodeEditorDialog(
     initial: NodeConfig?,
@@ -470,6 +481,11 @@ private fun NodeEditorDialog(
     var aeadMode by rememberSaveable { mutableStateOf(initial?.aead ?: AeadMode.CHACHA20_POLY1305) }
     var proxyMode by rememberSaveable { mutableStateOf(initial?.proxyMode ?: ProxyMode.GLOBAL) }
     var ruleUrls by rememberSaveable { mutableStateOf(initial?.ruleUrls?.joinToString("\n") ?: "") }
+    var ipMode by rememberSaveable { mutableStateOf(initial?.ipMode ?: IpMode.DEFAULT) }
+    var disableHttpMask by rememberSaveable { mutableStateOf(initial?.disableHttpMask ?: false) }
+    var httpMaskMode by rememberSaveable { mutableStateOf(initial?.httpMaskMode ?: HttpMaskMode.LEGACY) }
+    var httpMaskTls by rememberSaveable { mutableStateOf(initial?.httpMaskTls ?: false) }
+    var httpMaskHost by rememberSaveable { mutableStateOf(initial?.httpMaskHost.orEmpty()) }
     var enablePureDownlink by rememberSaveable { mutableStateOf(initial?.enablePureDownlink ?: true) }
     var shortLink by rememberSaveable { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
@@ -665,6 +681,86 @@ private fun NodeEditorDialog(
                         }
                     }
                     item {
+                        SectionCard(title = "Network") {
+                            Text("IP version preference", style = MaterialTheme.typography.labelMedium)
+                            SingleChoiceSegmentedButtonRow {
+                                IpMode.entries.forEachIndexed { index: Int, mode: IpMode ->
+                                    SegmentedButton(
+                                        selected = ipMode == mode,
+                                        onClick = { ipMode = mode },
+                                        shape = SegmentedButtonDefaults.itemShape(index, IpMode.entries.size),
+                                        modifier = Modifier.height(40.dp),
+                                        label = { Text(mode.label) }
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            val httpMaskEnabled = !disableHttpMask
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Switch(
+                                    checked = httpMaskEnabled,
+                                    onCheckedChange = { disableHttpMask = !it }
+                                )
+                                Column {
+                                    Text("HTTP mask")
+                                    Text(
+                                        "Legacy header or HTTP tunnel wrapper.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Text("HTTP tunnel mode", style = MaterialTheme.typography.labelMedium)
+                            SingleChoiceSegmentedButtonRow {
+                                HttpMaskMode.entries.forEachIndexed { index: Int, mode: HttpMaskMode ->
+                                    SegmentedButton(
+                                        selected = httpMaskMode == mode,
+                                        onClick = { httpMaskMode = mode },
+                                        enabled = httpMaskEnabled,
+                                        shape = SegmentedButtonDefaults.itemShape(index, HttpMaskMode.entries.size),
+                                        modifier = Modifier.height(40.dp),
+                                        label = { Text(mode.label) }
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            val tunnelOptionsEnabled = httpMaskEnabled && httpMaskMode != HttpMaskMode.LEGACY
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Switch(
+                                    checked = httpMaskTls,
+                                    onCheckedChange = { httpMaskTls = it },
+                                    enabled = tunnelOptionsEnabled
+                                )
+                                Column {
+                                    Text("Force HTTPS")
+                                    Text(
+                                        "Auto-infer if disabled; applies to tunnel modes.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = httpMaskHost,
+                                onValueChange = { httpMaskHost = it },
+                                label = { Text("HTTP Host/SNI override (optional)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = tunnelOptionsEnabled,
+                                singleLine = true
+                            )
+                        }
+                    }
+                    item {
                         SectionCard(title = "Proxy mode") {
                             Text("Routing", style = MaterialTheme.typography.labelMedium)
                             val proxyOptions = ProxyMode.entries
@@ -742,6 +838,11 @@ private fun NodeEditorDialog(
                                     aeadMode = aeadMode,
                                     proxyMode = proxyMode,
                                     ruleUrls = ruleUrls,
+                                    ipMode = ipMode,
+                                    disableHttpMask = disableHttpMask,
+                                    httpMaskMode = httpMaskMode,
+                                    httpMaskTls = httpMaskTls,
+                                    httpMaskHost = httpMaskHost,
                                     customTablesText = customTablesText,
                                     enablePureDownlink = enablePureDownlink
                                 )
@@ -773,6 +874,11 @@ private fun buildNodeConfig(
     aeadMode: AeadMode,
     proxyMode: ProxyMode,
     ruleUrls: String,
+    ipMode: IpMode,
+    disableHttpMask: Boolean,
+    httpMaskMode: HttpMaskMode,
+    httpMaskTls: Boolean,
+    httpMaskHost: String,
     enablePureDownlink: Boolean,
     customTablesText: String
 ): NodeConfig {
@@ -783,12 +889,13 @@ private fun buildNodeConfig(
     val minPad = paddingMin.toIntOrNull() ?: 0
     val maxPad = paddingMax.toIntOrNull() ?: 0
     val (normalizedMin, normalizedMax) = if (minPad <= maxPad) minPad to maxPad else maxPad to minPad
-    val sanitizedHost = host.trim()
+    val sanitizedHost = host.trim().removeSurrounding("[", "]")
     if (sanitizedHost.isBlank()) throw IllegalArgumentException("Host cannot be blank")
     if (key.trim().isEmpty()) throw IllegalArgumentException("Key cannot be blank")
     val sanitizedRuleUrls = ruleUrls.lines()
         .map { it.trim() }
         .filter { it.isNotEmpty() }
+    val sanitizedHttpMaskHost = httpMaskHost.trim()
 
     val customTables = parseCustomTablePatterns(customTablesText)
     customTables.forEach { validateCustomTablePattern(it) }
@@ -807,6 +914,11 @@ private fun buildNodeConfig(
         localPort = parsedLocalPort,
         proxyMode = proxyMode,
         ruleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList(),
+        ipMode = ipMode,
+        disableHttpMask = disableHttpMask,
+        httpMaskMode = httpMaskMode,
+        httpMaskTls = httpMaskTls,
+        httpMaskHost = sanitizedHttpMaskHost,
         customTable = customTables.firstOrNull().orEmpty(),
         customTables = customTables,
         createdAt = initial?.createdAt ?: System.currentTimeMillis()

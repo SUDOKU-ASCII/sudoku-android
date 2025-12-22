@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.0.9}"
+SUDOKU_REF="${SUDOKU_REF:-v0.1.0}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
@@ -183,6 +183,9 @@ func Start(jsonConfig string) error {
 	}
 	if cfg.ASCII == "" {
 		cfg.ASCII = "prefer_entropy"
+	}
+	if cfg.HTTPMaskMode == "" {
+		cfg.HTTPMaskMode = "legacy"
 	}
 	if !cfg.EnablePureDownlink && cfg.AEAD == "none" {
 		return fmt.Errorf("enable_pure_downlink=false requires AEAD to be enabled")

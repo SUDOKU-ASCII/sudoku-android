@@ -3,6 +3,7 @@ package com.futaiii.sudodroid.protocol
 import android.util.Base64
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
+import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
@@ -34,11 +35,22 @@ object ShortLinkCodec {
         val local = if (payload.mixPort == null || payload.mixPort == 0) 1080 else payload.mixPort
         val enablePureDownlink = payload.packedDownlink?.let { !it } ?: true
         val primaryCustomTable = payload.customTable?.trim().orEmpty()
-        val customTables = primaryCustomTable.takeIf { it.isNotEmpty() }?.let { listOf(it) } ?: emptyList()
+        val listedTables = payload.customTables
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        val customTables = if (listedTables.isNotEmpty()) {
+            listedTables
+        } else {
+            primaryCustomTable.takeIf { it.isNotEmpty() }?.let { listOf(it) } ?: emptyList()
+        }
+        val effectivePrimaryTable = primaryCustomTable.ifEmpty { customTables.firstOrNull().orEmpty() }
+        val httpMaskMode = HttpMaskMode.fromWire(payload.httpMaskMode)
+        val httpMaskHost = payload.httpMaskHost?.trim().orEmpty()
+        val sanitizedHost = payload.host.trim().removeSurrounding("[", "]")
 
         return NodeConfig(
-            name = payload.host,
-            host = payload.host,
+            name = sanitizedHost,
+            host = sanitizedHost,
             port = payload.port,
             key = payload.key ?: "",
             asciiMode = ascii,
@@ -47,15 +59,23 @@ object ShortLinkCodec {
             localPort = local,
             proxyMode = ProxyMode.PAC,
             ruleUrls = defaultRuleUrls,
-            customTable = primaryCustomTable,
-            customTables = customTables
+            customTable = effectivePrimaryTable,
+            customTables = customTables,
+            disableHttpMask = payload.disableHttpMask,
+            httpMaskMode = httpMaskMode,
+            httpMaskTls = payload.httpMaskTls,
+            httpMaskHost = httpMaskHost
         )
     }
 
     fun toLink(node: NodeConfig, advertiseHost: String? = null): String {
-        val host = advertiseHost ?: node.host
-        val primaryCustomTable = node.customTables.firstOrNull()?.trim().orEmpty()
-            .ifEmpty { node.customTable.trim() }
+        val host = (advertiseHost ?: node.host).trim().removeSurrounding("[", "]")
+        val normalizedCustomTables = node.customTables
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        val primaryCustomTable = normalizedCustomTables.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: node.customTable.trim().takeIf { it.isNotBlank() }
         val payload = Payload(
             host = host,
             port = node.port,
@@ -64,7 +84,12 @@ object ShortLinkCodec {
             aead = node.aead.wireName,
             mixPort = node.localPort,
             packedDownlink = !node.enablePureDownlink,
-            customTable = primaryCustomTable.takeIf { it.isNotBlank() }
+            customTable = primaryCustomTable,
+            customTables = normalizedCustomTables.takeIf { it.isNotEmpty() } ?: emptyList(),
+            disableHttpMask = node.disableHttpMask,
+            httpMaskMode = node.httpMaskMode.wireValue.takeUnless { node.httpMaskMode == HttpMaskMode.LEGACY },
+            httpMaskTls = node.httpMaskTls,
+            httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() }
         )
         val data = json.encodeToString(Payload.serializer(), payload)
         val encoded = Base64.encodeToString(
@@ -83,7 +108,12 @@ object ShortLinkCodec {
         @SerialName("e") val aead: String? = null,
         @SerialName("m") val mixPort: Int? = null,
         @SerialName("x") val packedDownlink: Boolean? = null,
-        @SerialName("t") val customTable: String? = null
+        @SerialName("t") val customTable: String? = null,
+        @SerialName("ts") val customTables: List<String> = emptyList(),
+        @SerialName("hd") val disableHttpMask: Boolean = false,
+        @SerialName("hm") val httpMaskMode: String? = null,
+        @SerialName("ht") val httpMaskTls: Boolean = false,
+        @SerialName("hh") val httpMaskHost: String? = null
     )
 }
 

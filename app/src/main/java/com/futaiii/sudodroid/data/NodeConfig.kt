@@ -25,6 +25,16 @@ data class NodeConfig(
     val localPort: Int = 1080,
     val proxyMode: ProxyMode = ProxyMode.GLOBAL,
     val ruleUrls: List<String> = emptyList(),
+    @SerialName("ip_mode")
+    val ipMode: IpMode = IpMode.DEFAULT,
+    @SerialName("disable_http_mask")
+    val disableHttpMask: Boolean = false,
+    @SerialName("http_mask_mode")
+    val httpMaskMode: HttpMaskMode = HttpMaskMode.LEGACY,
+    @SerialName("http_mask_tls")
+    val httpMaskTls: Boolean = false,
+    @SerialName("http_mask_host")
+    val httpMaskHost: String = "",
     val enableMieru: Boolean = false,
     val mieruPort: Int? = null,
     val mieruTransport: MieruTransport = MieruTransport.TCP,
@@ -70,6 +80,37 @@ enum class ProxyMode(val wireValue: String, val label: String) {
     DIRECT("direct", "Direct"),
     @SerialName("pac")
     PAC("pac", "PAC");
+}
+
+@Serializable
+enum class IpMode(val label: String) {
+    @SerialName("default")
+    DEFAULT("Auto"),
+    @SerialName("ipv4_only")
+    IPV4_ONLY("IPv4 only"),
+    @SerialName("ipv6_preferred")
+    IPV6_PREFERRED("IPv6 preferred");
+}
+
+@Serializable
+enum class HttpMaskMode(val wireValue: String, val label: String) {
+    @SerialName("legacy")
+    LEGACY("legacy", "Legacy"),
+    @SerialName("auto")
+    AUTO("auto", "Auto"),
+    @SerialName("xhttp")
+    XHTTP("xhttp", "xHTTP"),
+    @SerialName("pht")
+    PHT("pht", "PHT");
+
+    companion object {
+        fun fromWire(raw: String?): HttpMaskMode = when (raw?.lowercase()) {
+            "auto" -> AUTO
+            "xhttp" -> XHTTP
+            "pht" -> PHT
+            else -> LEGACY
+        }
+    }
 }
 
 @Serializable

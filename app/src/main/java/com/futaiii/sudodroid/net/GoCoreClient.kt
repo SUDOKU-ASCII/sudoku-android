@@ -57,7 +57,8 @@ object GoCoreClient {
     }
 
     fun buildConfigJson(node: NodeConfig): String {
-        val serverAddress = "${node.host.trim()}:${node.port}"
+        val resolved = ServerAddressResolver.resolve(node)
+        val serverAddress = resolved.serverAddress
         val proxyMode = node.proxyMode.wireValue
         val ruleUrls = if (node.proxyMode == ProxyMode.PAC) {
             node.ruleUrls.mapNotNull { url ->
@@ -77,6 +78,9 @@ object GoCoreClient {
             primaryCustomTable?.let { listOf(it) } ?: emptyList()
         }
 
+        val httpMaskHost = node.httpMaskHost.trim().ifEmpty {
+            if (!node.disableHttpMask) resolved.sniHost.orEmpty() else ""
+        }
         val config = GoCoreConfig(
             localPort = node.localPort,
             serverAddress = serverAddress,
@@ -89,7 +93,10 @@ object GoCoreClient {
             customTable = primaryCustomTable.orEmpty(),
             customTables = customTables,
             enablePureDownlink = node.enablePureDownlink,
-            disableHttpMask = false,
+            disableHttpMask = node.disableHttpMask,
+            httpMaskMode = node.httpMaskMode.wireValue,
+            httpMaskTls = node.httpMaskTls,
+            httpMaskHost = httpMaskHost,
             proxyMode = proxyMode
         )
         return json.encodeToString(config)
@@ -112,6 +119,9 @@ object GoCoreClient {
         @SerialName("custom_tables") val customTables: List<String> = emptyList(),
         @SerialName("enable_pure_downlink") val enablePureDownlink: Boolean = true,
         @SerialName("disable_http_mask") val disableHttpMask: Boolean = false,
+        @SerialName("http_mask_mode") val httpMaskMode: String,
+        @SerialName("http_mask_tls") val httpMaskTls: Boolean = false,
+        @SerialName("http_mask_host") val httpMaskHost: String = "",
         @SerialName("proxy_mode") val proxyMode: String
     )
 }
