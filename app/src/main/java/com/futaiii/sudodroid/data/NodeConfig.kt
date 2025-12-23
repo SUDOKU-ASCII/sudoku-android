@@ -1,7 +1,13 @@
 package com.futaiii.sudodroid.data
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import java.util.UUID
 
 @Serializable
@@ -92,24 +98,33 @@ enum class IpMode(val label: String) {
     IPV6_PREFERRED("IPv6 preferred");
 }
 
-@Serializable
+@Serializable(with = HttpMaskModeSerializer::class)
 enum class HttpMaskMode(val wireValue: String, val label: String) {
-    @SerialName("legacy")
     LEGACY("legacy", "Legacy"),
-    @SerialName("auto")
     AUTO("auto", "Auto"),
-    @SerialName("xhttp")
-    XHTTP("xhttp", "xHTTP"),
-    @SerialName("pht")
-    PHT("pht", "PHT");
+    STREAM("stream", "Stream"),
+    POLL("poll", "Poll");
 
     companion object {
         fun fromWire(raw: String?): HttpMaskMode = when (raw?.lowercase()) {
             "auto" -> AUTO
-            "xhttp" -> XHTTP
-            "pht" -> PHT
+            "stream", "xhttp" -> STREAM
+            "poll", "pht" -> POLL
             else -> LEGACY
         }
+    }
+}
+
+object HttpMaskModeSerializer : KSerializer<HttpMaskMode> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("HttpMaskMode", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: HttpMaskMode) {
+        encoder.encodeString(value.wireValue)
+    }
+
+    override fun deserialize(decoder: Decoder): HttpMaskMode {
+        return HttpMaskMode.fromWire(decoder.decodeString())
     }
 }
 
