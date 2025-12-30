@@ -36,6 +36,17 @@
             android:foregroundServiceType="dataSync"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE" />
+
+        <service
+            android:name=".qs.VpnTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_foreground"
+            android:label="@string/qs_tile_proxy_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

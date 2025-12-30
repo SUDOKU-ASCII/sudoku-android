@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.1.3}"
+SUDOKU_REF="${SUDOKU_REF:-v0.1.4}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
@@ -143,6 +143,145 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 }
 EOF
 
+# Inject mobile traffic stats helpers (direct vs proxy).
+echo "Injecting mobile traffic stats..."
+cat <<'EOF' > "${SUDOKU_DIR}/internal/app/mobile_traffic.go"
+package app
+
+import (
+	"net"
+	"sync/atomic"
+)
+
+type TrafficStats struct {
+	DirectTx uint64 `json:"direct_tx"`
+	DirectRx uint64 `json:"direct_rx"`
+	ProxyTx  uint64 `json:"proxy_tx"`
+	ProxyRx  uint64 `json:"proxy_rx"`
+}
+
+var (
+	trafficDirectTx uint64
+	trafficDirectRx uint64
+	trafficProxyTx  uint64
+	trafficProxyRx  uint64
+)
+
+const (
+	trafficKindDirect = 0
+	trafficKindProxy  = 1
+)
+
+type countingConn struct {
+	net.Conn
+	kind int
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if n > 0 {
+		if c.kind == trafficKindProxy {
+			atomic.AddUint64(&trafficProxyRx, uint64(n))
+		} else {
+			atomic.AddUint64(&trafficDirectRx, uint64(n))
+		}
+	}
+	return n, err
+}
+
+func (c *countingConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if n > 0 {
+		if c.kind == trafficKindProxy {
+			atomic.AddUint64(&trafficProxyTx, uint64(n))
+		} else {
+			atomic.AddUint64(&trafficDirectTx, uint64(n))
+		}
+	}
+	return n, err
+}
+
+func wrapConnForTrafficStats(conn net.Conn, shouldProxy bool) net.Conn {
+	if conn == nil {
+		return conn
+	}
+	kind := trafficKindDirect
+	if shouldProxy {
+		kind = trafficKindProxy
+	}
+	return &countingConn{Conn: conn, kind: kind}
+}
+
+func SnapshotTrafficStats() TrafficStats {
+	return TrafficStats{
+		DirectTx: atomic.LoadUint64(&trafficDirectTx),
+		DirectRx: atomic.LoadUint64(&trafficDirectRx),
+		ProxyTx:  atomic.LoadUint64(&trafficProxyTx),
+		ProxyRx:  atomic.LoadUint64(&trafficProxyRx),
+	}
+}
+
+func ResetTrafficStats() {
+	atomic.StoreUint64(&trafficDirectTx, 0)
+	atomic.StoreUint64(&trafficDirectRx, 0)
+	atomic.StoreUint64(&trafficProxyTx, 0)
+	atomic.StoreUint64(&trafficProxyRx, 0)
+}
+EOF
+
+# Patch upstream dialTarget() to wrap direct/proxy sockets so we can attribute traffic.
+echo "Patching dialTarget for traffic stats..."
+python3 - <<PY
+from __future__ import annotations
+
+import pathlib
+
+path = pathlib.Path("${SUDOKU_DIR}") / "internal/app/client.go"
+data = path.read_text(encoding="utf-8")
+
+needle = "func dialTarget("
+start = data.find(needle)
+if start == -1:
+    raise SystemExit("dialTarget not found in internal/app/client.go (upstream changed?)")
+
+brace_start = data.find("{", start)
+if brace_start == -1:
+    raise SystemExit("dialTarget brace not found")
+
+level = 0
+end = None
+for i in range(brace_start, len(data)):
+    ch = data[i]
+    if ch == "{":
+        level += 1
+    elif ch == "}":
+        level -= 1
+        if level == 0:
+            end = i + 1
+            break
+
+if end is None:
+    raise SystemExit("dialTarget function end not found")
+
+func_text = data[start:end]
+if "wrapConnForTrafficStats" in func_text:
+    raise SystemExit(0)
+
+before_proxy = "return conn, true"
+after_proxy = "return wrapConnForTrafficStats(conn, true), true"
+before_direct = "return dConn, true"
+after_direct = "return wrapConnForTrafficStats(dConn, false), true"
+
+if before_proxy not in func_text or before_direct not in func_text:
+    raise SystemExit("dialTarget returns not found (upstream changed?)")
+
+func_text = func_text.replace(before_proxy, after_proxy, 1)
+func_text = func_text.replace(before_direct, after_direct, 1)
+
+path.write_text(data[:start] + func_text + data[end:], encoding="utf-8")
+print("Patched", path)
+PY
+
 # Inject Mobile Wrapper Package
 echo "Injecting mobile wrapper..."
 mkdir -p "${SUDOKU_DIR}/pkg/mobile"
@@ -171,6 +310,7 @@ func Start(jsonConfig string) error {
 		instance.Stop()
 		instance = nil
 	}
+	app.ResetTrafficStats()
 
 	var cfg config.Config
 	if err := json.Unmarshal([]byte(jsonConfig), &cfg); err != nil {
@@ -218,6 +358,19 @@ func Start(jsonConfig string) error {
 	return nil
 }
 
+func GetTrafficStatsJson() string {
+	stats := app.SnapshotTrafficStats()
+	b, err := json.Marshal(stats)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+func ResetTrafficStats() {
+	app.ResetTrafficStats()
+}
+
 func Stop() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -225,6 +378,7 @@ func Stop() {
 		instance.Stop()
 		instance = nil
 	}
+	app.ResetTrafficStats()
 }
 EOF
 

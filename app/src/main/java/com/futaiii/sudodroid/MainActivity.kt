@@ -42,6 +42,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        maybeAutoStartFromIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeAutoStartFromIntent(intent)
+    }
+
+    private fun maybeAutoStartFromIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_AUTO_START_VPN, false) == true) {
+            startVpn()
+        }
     }
 
     private fun startVpn() {
@@ -90,5 +104,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val REQUEST_VPN = 100
+        const val EXTRA_AUTO_START_VPN = "com.futaiii.sudodroid.extra.AUTO_START_VPN"
     }
 }

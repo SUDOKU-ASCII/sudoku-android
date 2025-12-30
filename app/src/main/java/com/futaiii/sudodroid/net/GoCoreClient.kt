@@ -10,7 +10,7 @@ import kotlinx.serialization.json.Json
 
 object GoCoreClient {
     private const val TAG = "GoCoreClient"
-    private val json = Json { encodeDefaults = true }
+    private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
     // gomobile bind -javapkg com.futaiii.sudoku ./pkg/mobile
     // generates class com.futaiii.sudoku.mobile.Mobile
     private const val MOBILE_CLASS = "com.futaiii.sudoku.mobile.Mobile"
@@ -21,6 +21,8 @@ object GoCoreClient {
         private val startMethod = mobileClass?.getMethod("start", String::class.java)
         // New signature: stop()
         private val stopMethod = mobileClass?.getMethod("stop")
+        private val trafficMethod = mobileClass?.getMethod("getTrafficStatsJson")
+        private val resetTrafficMethod = mobileClass?.getMethod("resetTrafficStats")
 
         fun start(configJson: String) {
             val method = startMethod ?: error("Sudoku core AAR missing; run scripts/build_sudoku_aar.sh to generate $MOBILE_CLASS")
@@ -39,6 +41,23 @@ object GoCoreClient {
                 Log.w(TAG, "Failed to stop Go core", e)
             }
         }
+
+        fun getTrafficStatsJsonOrNull(): String? {
+            return try {
+                trafficMethod?.invoke(null) as? String
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to get Go core traffic stats", e)
+                null
+            }
+        }
+
+        fun resetTrafficStats() {
+            try {
+                resetTrafficMethod?.invoke(null)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to reset Go core traffic stats", e)
+            }
+        }
     }
 
     fun start(configJson: String) {
@@ -54,6 +73,15 @@ object GoCoreClient {
 
     fun stop() {
         MobileBinding.stop()
+    }
+
+    fun getTrafficStats(): TrafficStats? {
+        val raw = MobileBinding.getTrafficStatsJsonOrNull() ?: return null
+        return runCatching { json.decodeFromString<TrafficStats>(raw) }.getOrNull()
+    }
+
+    fun resetTrafficStats() {
+        MobileBinding.resetTrafficStats()
     }
 
     fun buildConfigJson(node: NodeConfig): String {
@@ -123,5 +151,13 @@ object GoCoreClient {
         @SerialName("http_mask_tls") val httpMaskTls: Boolean = false,
         @SerialName("http_mask_host") val httpMaskHost: String = "",
         @SerialName("proxy_mode") val proxyMode: String
+    )
+
+    @Serializable
+    data class TrafficStats(
+        @SerialName("direct_tx") val directTx: Long = 0,
+        @SerialName("direct_rx") val directRx: Long = 0,
+        @SerialName("proxy_tx") val proxyTx: Long = 0,
+        @SerialName("proxy_rx") val proxyRx: Long = 0
     )
 }

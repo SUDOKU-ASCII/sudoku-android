@@ -16,22 +16,27 @@ import com.futaiii.sudodroid.R
 import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
+import com.futaiii.sudodroid.qs.VpnTileService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.util.Locale
 
 class SudokuVpnService : VpnService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tunInterface: ParcelFileDescriptor? = null
     private var activeNode: NodeConfig? = null
     private var tunnelStarted = false
+    private var notificationJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
@@ -97,16 +102,20 @@ class SudokuVpnService : VpnService() {
                     } else {
                         activeNode = node
 
-                        startForeground(NOTI_ID, buildNotification())
+                        ensureNotificationChannel()
+                        startForeground(NOTI_ID, buildNotification(null))
                         scope.launch {
                             try {
                                 startCore(node)
                                 buildVpnInterface(node)
                                 startTunnel(node)
                                 statusFlow.value = true
+                                VpnTileService.requestListeningState(this@SudokuVpnService)
+                                startNotificationUpdates()
                             } catch (e: Throwable) {
                                 Log.e(TAG, "Failed to start VPN", e)
                                 statusFlow.value = false
+                                VpnTileService.requestListeningState(this@SudokuVpnService)
                                 stopSelf()
                             }
                         }
@@ -136,6 +145,23 @@ class SudokuVpnService : VpnService() {
         // still make a best-effort cleanup.
         runBlocking { stopVpnInternal() }
         scope.cancel()
+    }
+
+    private fun startNotificationUpdates() {
+        notificationJob?.cancel()
+        val mgr = getSystemService(NotificationManager::class.java)
+        notificationJob = scope.launch {
+            while (true) {
+                val stats = GoCoreClient.getTrafficStats()
+                mgr.notify(NOTI_ID, buildNotification(stats))
+                delay(1_000)
+            }
+        }
+    }
+
+    private fun stopNotificationUpdates() {
+        notificationJob?.cancel()
+        notificationJob = null
     }
 
     private fun buildVpnInterface(node: NodeConfig) {
@@ -193,10 +219,13 @@ class SudokuVpnService : VpnService() {
     private fun stopVpnInternal() {
         if (!tunnelStarted && tunInterface == null) {
             statusFlow.value = false
+            VpnTileService.requestListeningState(this)
             return
         }
 
         Log.i(TAG, "Stopping VPN...")
+
+        stopNotificationUpdates()
 
         // Stop components in reverse order, mirroring start sequence.
         try {
@@ -226,6 +255,7 @@ class SudokuVpnService : VpnService() {
         }
 
         statusFlow.value = false
+        VpnTileService.requestListeningState(this)
         Log.i(TAG, "VPN stopped")
     }
 
@@ -275,32 +305,61 @@ class SudokuVpnService : VpnService() {
     private fun startCore(node: NodeConfig) {
         val json = GoCoreClient.buildConfigJson(node)
         GoCoreClient.start(json)
+        GoCoreClient.resetTrafficStats()
     }
     
-    private fun buildNotification(): Notification {
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val mgr = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.vpn_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            )
-            channel.description = getString(R.string.vpn_channel_description)
-            mgr.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.vpn_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        )
+        channel.description = getString(R.string.vpn_channel_description)
+        mgr.createNotificationChannel(channel)
+    }
+
+    private fun buildNotification(stats: GoCoreClient.TrafficStats?): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val text = stats?.let { formatTrafficText(it) } ?: getString(R.string.notification_running)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.notification_running))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
+    }
+
+    private fun formatTrafficText(stats: GoCoreClient.TrafficStats): String {
+        val directTx = formatBytes(stats.directTx)
+        val directRx = formatBytes(stats.directRx)
+        val proxyTx = formatBytes(stats.proxyTx)
+        val proxyRx = formatBytes(stats.proxyRx)
+        return "直连 ↑$directTx ↓$directRx | 代理 ↑$proxyTx ↓$proxyRx"
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val value = bytes.coerceAtLeast(0L).toDouble()
+        val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
+        var v = value
+        var idx = 0
+        while (v >= 1024 && idx < units.lastIndex) {
+            v /= 1024
+            idx++
+        }
+        return if (idx == 0) {
+            "${v.toLong()}${units[idx]}"
+        } else {
+            String.format(Locale.US, "%.1f%s", v, units[idx])
+        }
     }
 
     companion object {
@@ -312,5 +371,7 @@ class SudokuVpnService : VpnService() {
         private const val TAG = "SudokuVpnService"
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow
+        val isRunning: Boolean
+            get() = statusFlow.value
     }
 }
