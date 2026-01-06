@@ -128,27 +128,140 @@ jobs:
           set -euo pipefail
           ref="${GITHUB_REF_NAME:-dev}"
           safe_ref="${ref//\//_}"
-          outdir="dist"
           apk_dir="app/build/outputs/apk/release"
+          meta="$apk_dir/output-metadata.json"
+          outdir="dist"
           mkdir -p "$outdir"
 
-          echo "APK outputs:"
+          echo "APK directory:"
           ls -la "$apk_dir" || true
-
-          apk_arm64="$(ls "$apk_dir"/*arm64-v8a*-release.apk 2>/dev/null | head -n 1 || true)"
-          apk_armv7="$(ls "$apk_dir"/*armeabi-v7a*-release.apk 2>/dev/null | head -n 1 || true)"
-          apk_universal="$(ls "$apk_dir"/*universal*-release.apk 2>/dev/null | head -n 1 || true)"
-          if [ -z "$apk_universal" ]; then
-            apk_universal="$(ls "$apk_dir"/*-release.apk 2>/dev/null | grep -Ev 'arm64-v8a|armeabi-v7a|x86' | head -n 1 || true)"
+          echo "APK files:"
+          ls -la "$apk_dir"/*.apk || true
+          echo "Output metadata:"
+          if [ -f "$meta" ]; then
+            cat "$meta"
+          else
+            echo "WARNING: $meta not found" >&2
           fi
 
-          test -n "$apk_universal"
-          test -n "$apk_arm64"
-          test -n "$apk_armv7"
+          python3 - <<'PY'
+          from __future__ import annotations
 
-          cp "$apk_universal" "$outdir/sudodroid-${safe_ref}-universal.apk"
-          cp "$apk_arm64" "$outdir/sudodroid-${safe_ref}-arm64-v8a.apk"
-          cp "$apk_armv7" "$outdir/sudodroid-${safe_ref}-armeabi-v7a.apk"
+          import json
+          import os
+          import shutil
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          apk_dir = Path("app/build/outputs/apk/release")
+          outdir = Path("dist")
+          outdir.mkdir(parents=True, exist_ok=True)
+
+          safe_ref = (os.environ.get("GITHUB_REF_NAME") or "dev").replace("/", "_")
+
+          meta = apk_dir / "output-metadata.json"
+          apks = sorted(apk_dir.glob("*.apk"))
+          if not apks:
+              sys.exit(f"No APKs found under {apk_dir}")
+
+          def pick_from_metadata() -> dict[str, Path] | None:
+              if not meta.exists():
+                  return None
+              try:
+                  data = json.loads(meta.read_text(encoding="utf-8"))
+              except Exception as e:
+                  print(f"WARNING: failed to parse {meta}: {e}", file=sys.stderr)
+                  return None
+              elements = data.get("elements") or []
+              if not isinstance(elements, list):
+                  return None
+
+              def find_by_abi(value: str) -> Path | None:
+                  for el in elements:
+                      filters = el.get("filters") or []
+                      for f in filters:
+                          if f.get("filterType") == "ABI" and f.get("value") == value:
+                              out = el.get("outputFile")
+                              if out:
+                                  p = apk_dir / out
+                                  if p.exists():
+                                      return p
+                  return None
+
+              arm64 = find_by_abi("arm64-v8a")
+              armv7 = find_by_abi("armeabi-v7a")
+              universal = find_by_abi("universal")
+              if universal is None:
+                  # Some AGP versions represent universal as "no filters".
+                  for el in elements:
+                      filters = el.get("filters") or []
+                      out = el.get("outputFile")
+                      if out and not filters:
+                          p = apk_dir / out
+                          if p.exists():
+                              universal = p
+                              break
+
+              if arm64 and armv7 and universal:
+                  return {"arm64-v8a": arm64, "armeabi-v7a": armv7, "universal": universal}
+              return None
+
+          def abis_in_apk(apk: Path) -> set[str]:
+              abis: set[str] = set()
+              with zipfile.ZipFile(apk) as z:
+                  for name in z.namelist():
+                      if not name.startswith("lib/") or not name.endswith(".so"):
+                          continue
+                      parts = name.split("/", 2)
+                      if len(parts) >= 3:
+                          abis.add(parts[1])
+              return abis
+
+          picked = pick_from_metadata()
+          if picked is None:
+              print("Metadata did not yield all outputs; falling back to inspecting APK contents.", file=sys.stderr)
+              candidates: dict[str, list[Path]] = {"arm64-v8a": [], "armeabi-v7a": [], "universal": []}
+              for apk in apks:
+                  abis = abis_in_apk(apk)
+                  if {"arm64-v8a", "armeabi-v7a"}.issubset(abis):
+                      candidates["universal"].append(apk)
+                  elif "arm64-v8a" in abis:
+                      candidates["arm64-v8a"].append(apk)
+                  elif "armeabi-v7a" in abis:
+                      candidates["armeabi-v7a"].append(apk)
+
+              def choose(xs: list[Path]) -> Path | None:
+                  if not xs:
+                      return None
+                  xs_sorted = sorted(xs, key=lambda p: (("universal" not in p.name), -p.stat().st_size, p.name))
+                  return xs_sorted[0]
+
+              picked = {
+                  "arm64-v8a": choose(candidates["arm64-v8a"]),
+                  "armeabi-v7a": choose(candidates["armeabi-v7a"]),
+                  "universal": choose(candidates["universal"]),
+              }
+
+          missing = [k for k, v in picked.items() if not v]
+          if missing:
+              print("ERROR: missing expected APK(s): " + ", ".join(missing), file=sys.stderr)
+              print("Detected APKs:", file=sys.stderr)
+              for apk in apks:
+                  print(f"  - {apk.name} (abis={sorted(abis_in_apk(apk))})", file=sys.stderr)
+              sys.exit(1)
+
+          out_map = {
+              "universal": outdir / f"sudodroid-{safe_ref}-universal.apk",
+              "arm64-v8a": outdir / f"sudodroid-{safe_ref}-arm64-v8a.apk",
+              "armeabi-v7a": outdir / f"sudodroid-{safe_ref}-armeabi-v7a.apk",
+          }
+          for k, src in picked.items():
+              dst = out_map[k]
+              assert src is not None
+              shutil.copy2(src, dst)
+              print(f"Collected {k}: {src} -> {dst}")
+          PY
 
           echo "Collected:"
           ls -la "$outdir"
