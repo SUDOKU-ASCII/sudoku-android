@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.HttpMaskMode
+import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
@@ -113,6 +114,7 @@ fun AppRoot(
     var editorInitial by remember { mutableStateOf<NodeConfig?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<NodeConfig?>(null) }
+    var pendingSwitch by remember { mutableStateOf<NodeConfig?>(null) }
     val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(state.error) {
@@ -156,6 +158,18 @@ fun AppRoot(
 
     val activeNode = state.nodes.firstOrNull { it.isActive }?.node
 
+    pendingSwitch?.let { node ->
+        ConfirmSwitchDialog(
+            targetName = node.name.ifBlank { node.host },
+            onDismiss = { pendingSwitch = null },
+            onConfirm = {
+                viewModel.selectNode(node.id)
+                onSwitchNodeWhileRunning(node)
+                pendingSwitch = null
+            }
+        )
+    }
+
     Scaffold(
         modifier = Modifier.statusBarsPadding(),
         topBar = {
@@ -194,9 +208,10 @@ fun AppRoot(
                 NodeList(
                     nodes = state.nodes,
                     onSelect = {
-                        viewModel.selectNode(it.id)
-                        if (state.isVpnRunning) {
-                            onSwitchNodeWhileRunning(it)
+                        if (state.isVpnRunning && state.activeId != it.id) {
+                            pendingSwitch = it
+                        } else {
+                            viewModel.selectNode(it.id)
                         }
                     },
                     onPing = { viewModel.pingNode(it) },
@@ -486,6 +501,7 @@ private fun NodeEditorDialog(
     var httpMaskMode by rememberSaveable { mutableStateOf(initial?.httpMaskMode ?: HttpMaskMode.LEGACY) }
     var httpMaskTls by rememberSaveable { mutableStateOf(initial?.httpMaskTls ?: false) }
     var httpMaskHost by rememberSaveable { mutableStateOf(initial?.httpMaskHost.orEmpty()) }
+    var httpMaskMultiplex by rememberSaveable { mutableStateOf(initial?.httpMaskMultiplex ?: HttpMaskMultiplex.OFF) }
     var enablePureDownlink by rememberSaveable { mutableStateOf(initial?.enablePureDownlink ?: true) }
     var shortLink by rememberSaveable { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
@@ -696,6 +712,11 @@ private fun NodeEditorDialog(
                             }
                             Spacer(Modifier.height(12.dp))
                             val httpMaskEnabled = !disableHttpMask
+                            LaunchedEffect(httpMaskEnabled, httpMaskMode) {
+                                if (!httpMaskEnabled || httpMaskMode == HttpMaskMode.LEGACY) {
+                                    httpMaskMultiplex = HttpMaskMultiplex.OFF
+                                }
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -758,6 +779,20 @@ private fun NodeEditorDialog(
                                 enabled = tunnelOptionsEnabled,
                                 singleLine = true
                             )
+                            Spacer(Modifier.height(12.dp))
+                            Text("HTTP multiplex (mux)", style = MaterialTheme.typography.labelMedium)
+                            SingleChoiceSegmentedButtonRow {
+                                HttpMaskMultiplex.entries.forEachIndexed { index: Int, mode: HttpMaskMultiplex ->
+                                    SegmentedButton(
+                                        selected = httpMaskMultiplex == mode,
+                                        onClick = { httpMaskMultiplex = mode },
+                                        enabled = tunnelOptionsEnabled,
+                                        shape = SegmentedButtonDefaults.itemShape(index, HttpMaskMultiplex.entries.size),
+                                        modifier = Modifier.height(40.dp),
+                                        label = { Text(mode.label) }
+                                    )
+                                }
+                            }
                         }
                     }
                     item {
@@ -843,6 +878,7 @@ private fun NodeEditorDialog(
                                     httpMaskMode = httpMaskMode,
                                     httpMaskTls = httpMaskTls,
                                     httpMaskHost = httpMaskHost,
+                                    httpMaskMultiplex = httpMaskMultiplex,
                                     customTablesText = customTablesText,
                                     enablePureDownlink = enablePureDownlink
                                 )
@@ -879,6 +915,7 @@ private fun buildNodeConfig(
     httpMaskMode: HttpMaskMode,
     httpMaskTls: Boolean,
     httpMaskHost: String,
+    httpMaskMultiplex: HttpMaskMultiplex,
     enablePureDownlink: Boolean,
     customTablesText: String
 ): NodeConfig {
@@ -896,6 +933,11 @@ private fun buildNodeConfig(
         .map { it.trim() }
         .filter { it.isNotEmpty() }
     val sanitizedHttpMaskHost = httpMaskHost.trim()
+    val sanitizedHttpMaskMultiplex = if (disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
+        HttpMaskMultiplex.OFF
+    } else {
+        httpMaskMultiplex
+    }
 
     val customTables = parseCustomTablePatterns(customTablesText)
     customTables.forEach { validateCustomTablePattern(it) }
@@ -919,6 +961,7 @@ private fun buildNodeConfig(
         httpMaskMode = httpMaskMode,
         httpMaskTls = httpMaskTls,
         httpMaskHost = sanitizedHttpMaskHost,
+        httpMaskMultiplex = sanitizedHttpMaskMultiplex,
         customTable = customTables.firstOrNull().orEmpty(),
         customTables = customTables,
         createdAt = initial?.createdAt ?: System.currentTimeMillis()
@@ -981,6 +1024,25 @@ private fun ConfirmDeleteDialog(
         text = { Text("Delete \"$nodeName\"?") },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text("Delete") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun ConfirmSwitchDialog(
+    targetName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Switch node") },
+        text = { Text("Switch VPN to \"$targetName\"?") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Switch") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

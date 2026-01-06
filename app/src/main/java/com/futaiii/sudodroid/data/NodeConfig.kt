@@ -41,6 +41,8 @@ data class NodeConfig(
     val httpMaskTls: Boolean = false,
     @SerialName("http_mask_host")
     val httpMaskHost: String = "",
+    @SerialName("http_mask_multiplex")
+    val httpMaskMultiplex: HttpMaskMultiplex = HttpMaskMultiplex.OFF,
     val enableMieru: Boolean = false,
     val mieruPort: Int? = null,
     val mieruTransport: MieruTransport = MieruTransport.TCP,
@@ -125,6 +127,34 @@ object HttpMaskModeSerializer : KSerializer<HttpMaskMode> {
 
     override fun deserialize(decoder: Decoder): HttpMaskMode {
         return HttpMaskMode.fromWire(decoder.decodeString())
+    }
+}
+
+@Serializable(with = HttpMaskMultiplexSerializer::class)
+enum class HttpMaskMultiplex(val wireValue: String, val label: String) {
+    OFF("off", "Off"),
+    AUTO("auto", "Auto"),
+    ON("on", "On");
+
+    companion object {
+        fun fromWire(raw: String?): HttpMaskMultiplex = when (raw?.lowercase()) {
+            "auto" -> AUTO
+            "on" -> ON
+            else -> OFF
+        }
+    }
+}
+
+object HttpMaskMultiplexSerializer : KSerializer<HttpMaskMultiplex> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("HttpMaskMultiplex", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: HttpMaskMultiplex) {
+        encoder.encodeString(value.wireValue)
+    }
+
+    override fun deserialize(decoder: Decoder): HttpMaskMultiplex {
+        return HttpMaskMultiplex.fromWire(decoder.decodeString())
     }
 }
 

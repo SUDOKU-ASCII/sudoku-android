@@ -86,11 +86,8 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, SudokuVpnService::class.java).apply {
             action = SudokuVpnService.ACTION_STOP
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        // Service is already running in foreground; startService is sufficient.
+        startService(intent)
     }
 
     private fun switchNode(node: NodeConfig) {

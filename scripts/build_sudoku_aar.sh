@@ -4,11 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.1.4}"
+SUDOKU_REF="${SUDOKU_REF:-v0.1.6}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
 GOMOBILE_BIN="${GOMOBILE_BIN:-gomobile}"
+GOMOBILE_TARGETS="${GOMOBILE_TARGETS:-android/arm,android/arm64}"
 
 # Ensure gomobile is installed
 if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
@@ -40,6 +41,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/saba-futai/sudoku/internal/config"
 	"github.com/saba-futai/sudoku/internal/tunnel"
@@ -87,8 +89,16 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 		PrivateKey: privateKeyBytes,
 	}
 
-	dialer := &tunnel.StandardDialer{
-		BaseDialer: baseDialer,
+	httpMaskMode := strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMode))
+	httpMaskMux := strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMultiplex))
+	var dialer tunnel.Dialer
+	if !cfg.DisableHTTPMask && (httpMaskMode == "stream" || httpMaskMode == "poll" || httpMaskMode == "auto") && httpMaskMux == "on" {
+		dialer = &tunnel.MuxDialer{BaseDialer: baseDialer}
+		log.Printf("Enabled HTTPMask session mux (single tunnel, multi-target)")
+	} else {
+		dialer = &tunnel.AdaptiveDialer{
+			BaseDialer: baseDialer,
+		}
 	}
 
 	// 3. GeoIP/PAC
@@ -292,6 +302,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"strings"
 
 	"github.com/saba-futai/sudoku/internal/app"
 	"github.com/saba-futai/sudoku/internal/config"
@@ -333,6 +344,18 @@ func Start(jsonConfig string) error {
 		cfg.HTTPMaskMode = "stream"
 	case "pht":
 		cfg.HTTPMaskMode = "poll"
+	}
+	if cfg.DisableHTTPMask {
+		cfg.HTTPMaskMultiplex = "off"
+	} else {
+		switch strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMultiplex)) {
+		case "", "off":
+			cfg.HTTPMaskMultiplex = "off"
+		case "auto", "on":
+			cfg.HTTPMaskMultiplex = strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMultiplex))
+		default:
+			cfg.HTTPMaskMultiplex = "off"
+		}
 	}
 	if !cfg.EnablePureDownlink && cfg.AEAD == "none" {
 		return fmt.Errorf("enable_pure_downlink=false requires AEAD to be enabled")
@@ -388,7 +411,7 @@ mkdir -p "$(dirname "${OUT_AAR}")"
 pushd "${SUDOKU_DIR}" >/dev/null
 go get -d golang.org/x/mobile/bind
 "${GOMOBILE_BIN}" bind \
-  -target=android/arm64,android/amd64 \
+  -target="${GOMOBILE_TARGETS}" \
   -androidapi "${ANDROID_API_LEVEL}" \
   -javapkg com.futaiii.sudoku \
   -o "${OUT_AAR}" \

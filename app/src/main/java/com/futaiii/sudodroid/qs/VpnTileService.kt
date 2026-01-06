@@ -51,11 +51,9 @@ class VpnTileService : TileService() {
             val intent = Intent(this, SudokuVpnService::class.java).apply {
                 action = SudokuVpnService.ACTION_STOP
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            // Service is already running in foreground; startService is sufficient and avoids
+            // foreground-service start requirements on some devices.
+            startService(intent)
             refreshTile()
             return
         }
@@ -72,7 +70,17 @@ class VpnTileService : TileService() {
 
         scope.launch {
             val nodeId = withContext(Dispatchers.IO) {
-                (application as SudodroidApp).nodeRepository.lastActiveId.first()
+                val repo = (application as SudodroidApp).nodeRepository
+                val nodes = repo.nodes.first()
+                val preferred = repo.lastActiveId.first()
+                preferred?.takeIf { id -> nodes.any { it.id == id } } ?: nodes.firstOrNull()?.id
+            }
+            if (nodeId.isNullOrBlank()) {
+                val intent = Intent(this@VpnTileService, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivityAndCollapse(intent)
+                return@launch
             }
             val intent = Intent(this@VpnTileService, SudokuVpnService::class.java).apply {
                 putExtra(SudokuVpnService.EXTRA_NODE_ID, nodeId)

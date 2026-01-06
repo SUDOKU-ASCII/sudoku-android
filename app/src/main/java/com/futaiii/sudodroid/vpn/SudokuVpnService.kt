@@ -37,15 +37,20 @@ class SudokuVpnService : VpnService() {
     private var activeNode: NodeConfig? = null
     private var tunnelStarted = false
     private var notificationJob: Job? = null
+    private var startJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
             when (intent?.action) {
                 ACTION_STOP -> {
-                    stopVpnInternal()
-                    // Mark this start as finished so the system does not
-                    // attempt to restart the service.
-                    stopSelf()
+                    scope.launch {
+                        startJob?.cancel()
+                        startJob = null
+                        stopVpnInternal()
+                        // Mark this start as finished so the system does not
+                        // attempt to restart the service.
+                        stopSelf()
+                    }
                     START_NOT_STICKY
                 }
 
@@ -60,7 +65,7 @@ class SudokuVpnService : VpnService() {
                         return START_STICKY
                     }
                     scope.launch {
-                        val node = selectNode(nodeId)
+                        val node = selectNode(nodeId, allowFallback = false)
                         if (node == null) {
                             Log.e(TAG, "Switch node failed: node not found for id=$nodeId")
                             return@launch
@@ -93,34 +98,35 @@ class SudokuVpnService : VpnService() {
                         return START_STICKY
                     }
                     statusFlow.value = false
-                    val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
-                    val node = selectNode(nodeId)
-                    if (node == null) {
-                        Log.e(TAG, "Cannot start VPN: node not found")
-                        stopSelf()
-                        START_NOT_STICKY
-                    } else {
-                        activeNode = node
+                    ensureNotificationChannel()
+                    startForeground(NOTI_ID, buildNotification(null))
 
-                        ensureNotificationChannel()
-                        startForeground(NOTI_ID, buildNotification(null))
-                        scope.launch {
-                            try {
-                                startCore(node)
-                                buildVpnInterface(node)
-                                startTunnel(node)
-                                statusFlow.value = true
-                                VpnTileService.requestListeningState(this@SudokuVpnService)
-                                startNotificationUpdates()
-                            } catch (e: Throwable) {
-                                Log.e(TAG, "Failed to start VPN", e)
-                                statusFlow.value = false
-                                VpnTileService.requestListeningState(this@SudokuVpnService)
-                                stopSelf()
-                            }
+                    val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
+                    startJob?.cancel()
+                    startJob = scope.launch {
+                        val node = selectNode(nodeId, allowFallback = true)
+                        if (node == null) {
+                            Log.e(TAG, "Cannot start VPN: node not found")
+                            stopVpnInternal()
+                            stopSelf()
+                            return@launch
                         }
-                        START_STICKY
+
+                        activeNode = node
+                        try {
+                            startCore(node)
+                            buildVpnInterface(node)
+                            startTunnel(node)
+                            statusFlow.value = true
+                            VpnTileService.requestListeningState(this@SudokuVpnService)
+                            startNotificationUpdates()
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "Failed to start VPN", e)
+                            stopVpnInternal()
+                            stopSelf()
+                        }
                     }
+                    START_STICKY
                 }
             }
         } catch (e: Throwable) {
@@ -217,14 +223,10 @@ class SudokuVpnService : VpnService() {
     }
 
     private fun stopVpnInternal() {
-        if (!tunnelStarted && tunInterface == null) {
-            statusFlow.value = false
-            VpnTileService.requestListeningState(this)
-            return
-        }
-
         Log.i(TAG, "Stopping VPN...")
 
+        startJob?.cancel()
+        startJob = null
         stopNotificationUpdates()
 
         // Stop components in reverse order, mirroring start sequence.
@@ -259,13 +261,13 @@ class SudokuVpnService : VpnService() {
         Log.i(TAG, "VPN stopped")
     }
 
-    private fun selectNode(nodeId: String?): NodeConfig? = runBlocking {
+    private suspend fun selectNode(nodeId: String?, allowFallback: Boolean): NodeConfig? {
         val repo = (application as SudodroidApp).nodeRepository
         val list = repo.nodes.first()
-        return@runBlocking when {
-            nodeId != null -> list.find { it.id == nodeId }
-            else -> list.firstOrNull()
-        }
+        if (list.isEmpty()) return null
+        if (nodeId.isNullOrBlank()) return list.first()
+        val found = list.find { it.id == nodeId }
+        return found ?: if (allowFallback) list.first() else null
     }
 
     private fun buildTunnelConfig(node: NodeConfig): String {

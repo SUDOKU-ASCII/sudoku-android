@@ -123,17 +123,59 @@ jobs:
           ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
         run: ./gradlew :app:assembleRelease
 
-      - name: Upload APK
+      - name: Collect APKs
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF_NAME:-dev}"
+          safe_ref="${ref//\//_}"
+          outdir="dist"
+          apk_dir="app/build/outputs/apk/release"
+          mkdir -p "$outdir"
+
+          echo "APK outputs:"
+          ls -la "$apk_dir" || true
+
+          apk_arm64="$(ls "$apk_dir"/*arm64-v8a*-release.apk 2>/dev/null | head -n 1 || true)"
+          apk_armv7="$(ls "$apk_dir"/*armeabi-v7a*-release.apk 2>/dev/null | head -n 1 || true)"
+          apk_universal="$(ls "$apk_dir"/*universal*-release.apk 2>/dev/null | head -n 1 || true)"
+          if [ -z "$apk_universal" ]; then
+            apk_universal="$(ls "$apk_dir"/*-release.apk 2>/dev/null | grep -Ev 'arm64-v8a|armeabi-v7a|x86' | head -n 1 || true)"
+          fi
+
+          test -n "$apk_universal"
+          test -n "$apk_arm64"
+          test -n "$apk_armv7"
+
+          cp "$apk_universal" "$outdir/sudodroid-${safe_ref}-universal.apk"
+          cp "$apk_arm64" "$outdir/sudodroid-${safe_ref}-arm64-v8a.apk"
+          cp "$apk_armv7" "$outdir/sudodroid-${safe_ref}-armeabi-v7a.apk"
+
+          echo "Collected:"
+          ls -la "$outdir"
+
+      - name: Upload universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: sudodroid-apk
-          path: app/build/outputs/apk/release/*.apk
+          name: sudodroid-universal
+          path: dist/*-universal.apk
+
+      - name: Upload arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sudodroid-arm64-v8a
+          path: dist/*-arm64-v8a.apk
+
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sudodroid-armeabi-v7a
+          path: dist/*-armeabi-v7a.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           name: Sudodroid ${{ github.ref_name }}
-          files: app/build/outputs/apk/release/*.apk
+          files: dist/*.apk
           body: |
-            Automated release for ${{ github.ref_name }} including armeabi-v7a and arm64-v8a native libraries.
+            Automated release for ${{ github.ref_name }} including universal, armeabi-v7a, and arm64-v8a APKs.

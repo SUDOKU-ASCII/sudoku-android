@@ -1,6 +1,8 @@
 package com.futaiii.sudodroid.net
 
 import android.util.Log
+import com.futaiii.sudodroid.data.HttpMaskMode
+import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
@@ -109,6 +111,11 @@ object GoCoreClient {
         val httpMaskHost = node.httpMaskHost.trim().ifEmpty {
             if (!node.disableHttpMask) resolved.sniHost.orEmpty() else ""
         }
+        val httpMaskMultiplex = if (node.disableHttpMask || node.httpMaskMode == HttpMaskMode.LEGACY) {
+            HttpMaskMultiplex.OFF.wireValue
+        } else {
+            node.httpMaskMultiplex.wireValue
+        }
         val config = GoCoreConfig(
             localPort = node.localPort,
             serverAddress = serverAddress,
@@ -125,6 +132,7 @@ object GoCoreClient {
             httpMaskMode = node.httpMaskMode.wireValue,
             httpMaskTls = node.httpMaskTls,
             httpMaskHost = httpMaskHost,
+            httpMaskMultiplex = httpMaskMultiplex,
             proxyMode = proxyMode
         )
         return json.encodeToString(config)
@@ -150,6 +158,7 @@ object GoCoreClient {
         @SerialName("http_mask_mode") val httpMaskMode: String,
         @SerialName("http_mask_tls") val httpMaskTls: Boolean = false,
         @SerialName("http_mask_host") val httpMaskHost: String = "",
+        @SerialName("http_mask_multiplex") val httpMaskMultiplex: String = "off",
         @SerialName("proxy_mode") val proxyMode: String
     )
 

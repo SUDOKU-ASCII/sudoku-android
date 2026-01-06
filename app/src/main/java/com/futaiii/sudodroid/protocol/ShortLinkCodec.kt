@@ -4,6 +4,7 @@ import android.util.Base64
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.HttpMaskMode
+import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
@@ -46,6 +47,11 @@ object ShortLinkCodec {
         val effectivePrimaryTable = primaryCustomTable.ifEmpty { customTables.firstOrNull().orEmpty() }
         val httpMaskMode = HttpMaskMode.fromWire(payload.httpMaskMode)
         val httpMaskHost = payload.httpMaskHost?.trim().orEmpty()
+        val httpMaskMultiplex = if (payload.disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
+            HttpMaskMultiplex.OFF
+        } else {
+            HttpMaskMultiplex.fromWire(payload.httpMaskMux)
+        }
         val sanitizedHost = payload.host.trim().removeSurrounding("[", "]")
 
         return NodeConfig(
@@ -64,7 +70,8 @@ object ShortLinkCodec {
             disableHttpMask = payload.disableHttpMask,
             httpMaskMode = httpMaskMode,
             httpMaskTls = payload.httpMaskTls,
-            httpMaskHost = httpMaskHost
+            httpMaskHost = httpMaskHost,
+            httpMaskMultiplex = httpMaskMultiplex
         )
     }
 
@@ -89,7 +96,10 @@ object ShortLinkCodec {
             disableHttpMask = node.disableHttpMask,
             httpMaskMode = node.httpMaskMode.wireValue.takeUnless { node.httpMaskMode == HttpMaskMode.LEGACY },
             httpMaskTls = node.httpMaskTls,
-            httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() }
+            httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() },
+            httpMaskMux = node.httpMaskMultiplex.wireValue.takeUnless {
+                node.disableHttpMask || it == HttpMaskMultiplex.OFF.wireValue
+            }
         )
         val data = json.encodeToString(Payload.serializer(), payload)
         val encoded = Base64.encodeToString(
@@ -113,7 +123,8 @@ object ShortLinkCodec {
         @SerialName("hd") val disableHttpMask: Boolean = false,
         @SerialName("hm") val httpMaskMode: String? = null,
         @SerialName("ht") val httpMaskTls: Boolean = false,
-        @SerialName("hh") val httpMaskHost: String? = null
+        @SerialName("hh") val httpMaskHost: String? = null,
+        @SerialName("hx") val httpMaskMux: String? = null
     )
 }
 
