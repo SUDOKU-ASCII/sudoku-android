@@ -9,14 +9,16 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.1.0"
+val computedVersionName: String = tagVersionName?.takeIf { it.isNotBlank() } ?: "0.1.0"
 
 fun computeVersionCodeFromName(name: String): Int {
-    val parts = name.split(".")
-    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
-    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
-    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
-    return major * 10000 + minor * 100 + patch
+    val match = Regex("""^(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?""")
+        .find(name.trim())
+    val major = match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+    val minor = match?.groupValues?.getOrNull(2)?.toIntOrNull() ?: 0
+    val patch = match?.groupValues?.getOrNull(3)?.toIntOrNull() ?: 0
+    val code = major * 10000 + minor * 100 + patch
+    return if (code > 0) code else 1
 }
 
 val computedVersionCode: Int = computeVersionCodeFromName(computedVersionName)
