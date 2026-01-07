@@ -54,7 +54,8 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -86,6 +87,8 @@ android {
     }
 
     packaging {
+        // Reduce APK size by allowing native libs to be compressed in the APK.
+        jniLibs.useLegacyPackaging = true
         resources.excludes += setOf(
             "META-INF/INDEX.LIST",
             "META-INF/LICENSE",

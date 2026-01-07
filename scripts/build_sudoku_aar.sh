@@ -10,6 +10,8 @@ OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
 GOMOBILE_BIN="${GOMOBILE_BIN:-gomobile}"
 GOMOBILE_TARGETS="${GOMOBILE_TARGETS:-android/arm,android/arm64}"
+# Shrink native output: remove symbol table & DWARF (biggest win for gomobile AAR size).
+GOMOBILE_LDFLAGS="${GOMOBILE_LDFLAGS:--s -w}"
 
 # Ensure gomobile is installed
 if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
@@ -409,10 +411,14 @@ EOF
 echo "Building AAR..."
 mkdir -p "$(dirname "${OUT_AAR}")"
 pushd "${SUDOKU_DIR}" >/dev/null
+if [[ "${GOFLAGS:-}" != *"-trimpath"* ]]; then
+  export GOFLAGS="${GOFLAGS:-} -trimpath"
+fi
 go get -d golang.org/x/mobile/bind
 "${GOMOBILE_BIN}" bind \
   -target="${GOMOBILE_TARGETS}" \
   -androidapi "${ANDROID_API_LEVEL}" \
+  -ldflags="${GOMOBILE_LDFLAGS}" \
   -javapkg com.futaiii.sudoku \
   -o "${OUT_AAR}" \
   ./pkg/mobile
