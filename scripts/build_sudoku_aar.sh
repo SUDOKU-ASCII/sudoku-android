@@ -78,7 +78,7 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 	}
 
 	// 2. Build one or more tables (supports custom_tables rotation).
-	tables, err := buildTablesFromConfig(cfg)
+	tables, err := BuildTables(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("build table(s): %w", err)
 	}
