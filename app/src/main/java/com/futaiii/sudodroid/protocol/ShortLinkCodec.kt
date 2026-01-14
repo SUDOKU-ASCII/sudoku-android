@@ -47,6 +47,7 @@ object ShortLinkCodec {
         val effectivePrimaryTable = primaryCustomTable.ifEmpty { customTables.firstOrNull().orEmpty() }
         val httpMaskMode = HttpMaskMode.fromWire(payload.httpMaskMode)
         val httpMaskHost = payload.httpMaskHost?.trim().orEmpty()
+        val httpMaskPathRoot = normalizeHttpMaskPathRoot(payload.httpMaskPath)
         val httpMaskMultiplex = if (payload.disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
             HttpMaskMultiplex.OFF
         } else {
@@ -71,6 +72,7 @@ object ShortLinkCodec {
             httpMaskMode = httpMaskMode,
             httpMaskTls = payload.httpMaskTls,
             httpMaskHost = httpMaskHost,
+            httpMaskPathRoot = httpMaskPathRoot,
             httpMaskMultiplex = httpMaskMultiplex
         )
     }
@@ -97,6 +99,7 @@ object ShortLinkCodec {
             httpMaskMode = node.httpMaskMode.wireValue.takeUnless { node.httpMaskMode == HttpMaskMode.LEGACY },
             httpMaskTls = node.httpMaskTls,
             httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() },
+            httpMaskPath = normalizeHttpMaskPathRoot(node.httpMaskPathRoot).takeIf { it.isNotBlank() },
             httpMaskMux = node.httpMaskMultiplex.wireValue.takeUnless {
                 node.disableHttpMask || it == HttpMaskMultiplex.OFF.wireValue
             }
@@ -124,7 +127,8 @@ object ShortLinkCodec {
         @SerialName("hm") val httpMaskMode: String? = null,
         @SerialName("ht") val httpMaskTls: Boolean = false,
         @SerialName("hh") val httpMaskHost: String? = null,
-        @SerialName("hx") val httpMaskMux: String? = null
+        @SerialName("hx") val httpMaskMux: String? = null,
+        @SerialName("hy") val httpMaskPath: String? = null
     )
 }
 
@@ -148,4 +152,12 @@ private fun decodeBase64Flexible(encoded: String): ByteArray {
     } catch (_: IllegalArgumentException) {
         Base64.decode(encoded, Base64.DEFAULT)
     }
+}
+
+private fun normalizeHttpMaskPathRoot(raw: String?): String {
+    val trimmed = raw.orEmpty().trim().trim('/')
+    if (trimmed.isEmpty()) return ""
+    if (trimmed.contains('/')) return ""
+    if (!trimmed.all { it.isLetterOrDigit() || it == '_' || it == '-' }) return ""
+    return trimmed
 }

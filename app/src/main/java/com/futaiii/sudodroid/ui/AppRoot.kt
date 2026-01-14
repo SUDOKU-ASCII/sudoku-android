@@ -501,6 +501,7 @@ private fun NodeEditorDialog(
     var httpMaskMode by rememberSaveable { mutableStateOf(initial?.httpMaskMode ?: HttpMaskMode.LEGACY) }
     var httpMaskTls by rememberSaveable { mutableStateOf(initial?.httpMaskTls ?: false) }
     var httpMaskHost by rememberSaveable { mutableStateOf(initial?.httpMaskHost.orEmpty()) }
+    var httpMaskPathRoot by rememberSaveable { mutableStateOf(initial?.httpMaskPathRoot.orEmpty()) }
     var httpMaskMultiplex by rememberSaveable { mutableStateOf(initial?.httpMaskMultiplex ?: HttpMaskMultiplex.OFF) }
     var enablePureDownlink by rememberSaveable { mutableStateOf(initial?.enablePureDownlink ?: true) }
     var shortLink by rememberSaveable { mutableStateOf("") }
@@ -780,6 +781,15 @@ private fun NodeEditorDialog(
                                 singleLine = true
                             )
                             Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = httpMaskPathRoot,
+                                onValueChange = { httpMaskPathRoot = it },
+                                label = { Text("HTTP path root (optional)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = tunnelOptionsEnabled,
+                                singleLine = true
+                            )
+                            Spacer(Modifier.height(12.dp))
                             Text("HTTP multiplex (mux)", style = MaterialTheme.typography.labelMedium)
                             SingleChoiceSegmentedButtonRow {
                                 HttpMaskMultiplex.entries.forEachIndexed { index: Int, mode: HttpMaskMultiplex ->
@@ -878,6 +888,7 @@ private fun NodeEditorDialog(
                                     httpMaskMode = httpMaskMode,
                                     httpMaskTls = httpMaskTls,
                                     httpMaskHost = httpMaskHost,
+                                    httpMaskPathRoot = httpMaskPathRoot,
                                     httpMaskMultiplex = httpMaskMultiplex,
                                     customTablesText = customTablesText,
                                     enablePureDownlink = enablePureDownlink
@@ -915,6 +926,7 @@ private fun buildNodeConfig(
     httpMaskMode: HttpMaskMode,
     httpMaskTls: Boolean,
     httpMaskHost: String,
+    httpMaskPathRoot: String,
     httpMaskMultiplex: HttpMaskMultiplex,
     enablePureDownlink: Boolean,
     customTablesText: String
@@ -933,6 +945,7 @@ private fun buildNodeConfig(
         .map { it.trim() }
         .filter { it.isNotEmpty() }
     val sanitizedHttpMaskHost = httpMaskHost.trim()
+    val sanitizedHttpMaskPathRoot = normalizeHttpMaskPathRoot(httpMaskPathRoot)
     val sanitizedHttpMaskMultiplex = if (disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
         HttpMaskMultiplex.OFF
     } else {
@@ -961,11 +974,24 @@ private fun buildNodeConfig(
         httpMaskMode = httpMaskMode,
         httpMaskTls = httpMaskTls,
         httpMaskHost = sanitizedHttpMaskHost,
+        httpMaskPathRoot = sanitizedHttpMaskPathRoot,
         httpMaskMultiplex = sanitizedHttpMaskMultiplex,
         customTable = customTables.firstOrNull().orEmpty(),
         customTables = customTables,
         createdAt = initial?.createdAt ?: System.currentTimeMillis()
     )
+}
+
+private fun normalizeHttpMaskPathRoot(raw: String): String {
+    val trimmed = raw.trim().trim('/')
+    if (trimmed.isEmpty()) return ""
+    if (trimmed.contains('/')) {
+        throw IllegalArgumentException("HTTP path root must be a single segment (no '/')")
+    }
+    if (!trimmed.all { it.isLetterOrDigit() || it == '_' || it == '-' }) {
+        throw IllegalArgumentException("HTTP path root may only contain letters, digits, '_' or '-'")
+    }
+    return trimmed
 }
 
 private fun parseCustomTablePatterns(raw: String): List<String> {

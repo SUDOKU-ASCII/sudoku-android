@@ -116,6 +116,7 @@ object GoCoreClient {
         } else {
             node.httpMaskMultiplex.wireValue
         }
+        val httpMaskPathRoot = node.httpMaskPathRoot.trim()
         val config = GoCoreConfig(
             localPort = node.localPort,
             serverAddress = serverAddress,
@@ -132,6 +133,7 @@ object GoCoreClient {
             httpMaskMode = node.httpMaskMode.wireValue,
             httpMaskTls = node.httpMaskTls,
             httpMaskHost = httpMaskHost,
+            httpMaskPathRoot = httpMaskPathRoot,
             httpMaskMultiplex = httpMaskMultiplex,
             proxyMode = proxyMode
         )
@@ -158,6 +160,7 @@ object GoCoreClient {
         @SerialName("http_mask_mode") val httpMaskMode: String,
         @SerialName("http_mask_tls") val httpMaskTls: Boolean = false,
         @SerialName("http_mask_host") val httpMaskHost: String = "",
+        @SerialName("path_root") val httpMaskPathRoot: String = "",
         @SerialName("http_mask_multiplex") val httpMaskMultiplex: String = "off",
         @SerialName("proxy_mode") val proxyMode: String
     )

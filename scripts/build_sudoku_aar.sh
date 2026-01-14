@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.1.6}"
+SUDOKU_REF="${SUDOKU_REF:-v0.1.7}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"

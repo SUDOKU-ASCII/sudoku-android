@@ -41,6 +41,8 @@ data class NodeConfig(
     val httpMaskTls: Boolean = false,
     @SerialName("http_mask_host")
     val httpMaskHost: String = "",
+    @SerialName("path_root")
+    val httpMaskPathRoot: String = "",
     @SerialName("http_mask_multiplex")
     val httpMaskMultiplex: HttpMaskMultiplex = HttpMaskMultiplex.OFF,
     val enableMieru: Boolean = false,
