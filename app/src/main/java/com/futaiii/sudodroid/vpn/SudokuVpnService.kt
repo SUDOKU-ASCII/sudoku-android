@@ -17,6 +17,7 @@ import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.qs.VpnTileService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,9 +28,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 class SudokuVpnService : VpnService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,6 +39,7 @@ class SudokuVpnService : VpnService() {
     private var tunnelStarted = false
     private var notificationJob: Job? = null
     private var startJob: Job? = null
+    private val stopInProgress = AtomicBoolean(false)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
@@ -97,6 +99,14 @@ class SudokuVpnService : VpnService() {
                         Log.i(TAG, "VPN already running, ignoring duplicate start")
                         return START_STICKY
                     }
+                    if (stopInProgress.get()) {
+                        Log.i(TAG, "Start requested while stopping; ignoring")
+                        return START_STICKY
+                    }
+                    if (startJob?.isActive == true) {
+                        Log.i(TAG, "VPN start already in progress; ignoring duplicate start")
+                        return START_STICKY
+                    }
                     statusFlow.value = false
                     ensureNotificationChannel()
                     startForeground(NOTI_ID, buildNotification(null))
@@ -120,6 +130,8 @@ class SudokuVpnService : VpnService() {
                             statusFlow.value = true
                             VpnTileService.requestListeningState(this@SudokuVpnService)
                             startNotificationUpdates()
+                        } catch (e: CancellationException) {
+                            Log.i(TAG, "VPN start cancelled")
                         } catch (e: Throwable) {
                             Log.e(TAG, "Failed to start VPN", e)
                             stopVpnInternal()
@@ -147,9 +159,10 @@ class SudokuVpnService : VpnService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // If the system destroys the service without an explicit STOP action,
-        // still make a best-effort cleanup.
-        runBlocking { stopVpnInternal() }
+        // Keep onDestroy non-blocking; heavy stop work should happen on scope threads.
+        runCatching { tunInterface?.close() }
+        tunInterface = null
+        statusFlow.value = false
         scope.cancel()
     }
 
@@ -223,42 +236,59 @@ class SudokuVpnService : VpnService() {
     }
 
     private fun stopVpnInternal() {
+        if (!stopInProgress.compareAndSet(false, true)) {
+            Log.i(TAG, "Stop already in progress; ignoring")
+            return
+        }
+
         Log.i(TAG, "Stopping VPN...")
 
-        startJob?.cancel()
-        startJob = null
-        stopNotificationUpdates()
-
-        // Stop components in reverse order, mirroring start sequence.
         try {
-            Socks5TunnelNative.stop()
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error stopping tunnel", e)
+            startJob?.cancel()
+            startJob = null
+            stopNotificationUpdates()
+
+            // Tear down the VPN interface early to unblock any native reads on the tun FD.
+            val pfd = tunInterface
+            tunInterface = null
+            runCatching { pfd?.close() }
+
+            tunnelStarted = false
+
+            // Update UI/tiles even if native stops hang.
+            statusFlow.value = false
+            VpnTileService.requestListeningState(this)
+
+            // Stop components with a bounded wait so STOP can't wedge the service.
+            stopWithTimeout("hev-socks5-tunnel", 1_500) { Socks5TunnelNative.stop() }
+            stopWithTimeout("sudoku-core", 1_500) { GoCoreClient.stop() }
+
+            runCatching { stopForeground(true) }
+        } finally {
+            stopInProgress.set(false)
         }
 
-        try {
-            GoCoreClient.stop()
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error stopping core", e)
-        }
-
-        try {
-            tunInterface?.close()
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error closing TUN", e)
-        }
-        tunInterface = null
-        tunnelStarted = false
-
-        try {
-            stopForeground(true)
-        } catch (e: Throwable) {
-            Log.w(TAG, "Failed to stop foreground", e)
-        }
-
-        statusFlow.value = false
-        VpnTileService.requestListeningState(this)
         Log.i(TAG, "VPN stopped")
+    }
+
+    private fun stopWithTimeout(name: String, timeoutMs: Long, block: () -> Unit) {
+        val thread = Thread(
+            {
+                runCatching { block() }
+                    .onFailure { Log.e(TAG, "Error stopping $name", it) }
+            },
+            "Sudodroid-stop-$name"
+        ).apply { isDaemon = true }
+
+        thread.start()
+        try {
+            thread.join(timeoutMs)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        if (thread.isAlive) {
+            Log.w(TAG, "Timed out stopping $name after ${timeoutMs}ms; continuing")
+        }
     }
 
     private suspend fun selectNode(nodeId: String?, allowFallback: Boolean): NodeConfig? {

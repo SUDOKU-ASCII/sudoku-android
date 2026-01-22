@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.1.7}"
+SUDOKU_REF="${SUDOKU_REF:-v0.1.10}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
@@ -23,7 +23,7 @@ if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
 fi
 
 # Cleanup and Prep
-rm -rf "${WORK_DIR}"
+rm -r "${WORK_DIR}" 2>/dev/null || true
 mkdir -p "${WORK_DIR}"
 
 # Clone sudoku
@@ -302,7 +302,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"strings"
 
 	"github.com/saba-futai/sudoku/internal/app"
 	"github.com/saba-futai/sudoku/internal/config"
@@ -328,16 +327,6 @@ func Start(jsonConfig string) error {
 		return fmt.Errorf("parse config: %w", err)
 	}
 
-	// Apply defaults similar to config.Load.
-	if cfg.Transport == "" {
-		cfg.Transport = "tcp"
-	}
-	if cfg.ASCII == "" {
-		cfg.ASCII = "prefer_entropy"
-	}
-	if cfg.HTTPMaskMode == "" {
-		cfg.HTTPMaskMode = "legacy"
-	}
 	// Backward compatibility for legacy names.
 	switch cfg.HTTPMaskMode {
 	case "xhttp":
@@ -345,32 +334,8 @@ func Start(jsonConfig string) error {
 	case "pht":
 		cfg.HTTPMaskMode = "poll"
 	}
-	if cfg.DisableHTTPMask {
-		cfg.HTTPMaskMultiplex = "off"
-	} else {
-		switch strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMultiplex)) {
-		case "", "off":
-			cfg.HTTPMaskMultiplex = "off"
-		case "auto", "on":
-			cfg.HTTPMaskMultiplex = strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMultiplex))
-		default:
-			cfg.HTTPMaskMultiplex = "off"
-		}
-	}
-	if !cfg.EnablePureDownlink && cfg.AEAD == "none" {
-		return fmt.Errorf("enable_pure_downlink=false requires AEAD to be enabled")
-	}
-
-	// Proxy Mode Logic
-	if len(cfg.RuleURLs) > 0 && (cfg.RuleURLs[0] == "global" || cfg.RuleURLs[0] == "direct") {
-		cfg.ProxyMode = cfg.RuleURLs[0]
-		cfg.RuleURLs = nil
-	} else if len(cfg.RuleURLs) > 0 {
-		cfg.ProxyMode = "pac"
-	} else {
-		if cfg.ProxyMode == "" {
-			cfg.ProxyMode = "global"
-		}
+	if err := cfg.Finalize(); err != nil {
+		return err
 	}
 
 	inst, err := app.StartMobileClient(&cfg)
@@ -419,5 +384,5 @@ go get -d golang.org/x/mobile/bind
 popd >/dev/null
 
 # Cleanup
-rm -rf "${WORK_DIR}"
+rm -r "${WORK_DIR}" 2>/dev/null || true
 echo "Generated ${OUT_AAR}"
