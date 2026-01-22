@@ -18,7 +18,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,7 +39,6 @@ class VpnTileService : TileService() {
         statusJob?.cancel()
         statusJob = scope.launch {
             SudokuVpnService.status
-                .distinctUntilChanged()
                 .collect { isRunning -> updateTile(isRunning) }
         }
         updateTile(SudokuVpnService.isRunning)
