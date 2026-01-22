@@ -14,8 +14,11 @@ import com.futaiii.sudodroid.R
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -23,15 +26,30 @@ import kotlinx.coroutines.withContext
 @RequiresApi(Build.VERSION_CODES.N)
 class VpnTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var statusJob: Job? = null
 
     override fun onDestroy() {
         super.onDestroy()
+        statusJob?.cancel()
+        statusJob = null
         scope.cancel()
     }
 
     override fun onStartListening() {
         super.onStartListening()
-        refreshTile()
+        statusJob?.cancel()
+        statusJob = scope.launch {
+            SudokuVpnService.status
+                .distinctUntilChanged()
+                .collect { isRunning -> updateTile(isRunning) }
+        }
+        updateTile(SudokuVpnService.isRunning)
+    }
+
+    override fun onStopListening() {
+        super.onStopListening()
+        statusJob?.cancel()
+        statusJob = null
     }
 
     override fun onClick() {
@@ -39,10 +57,10 @@ class VpnTileService : TileService() {
         toggle()
     }
 
-    private fun refreshTile() {
+    private fun updateTile(isRunning: Boolean) {
         val tile = qsTile ?: return
         tile.label = getString(R.string.qs_tile_proxy_label)
-        tile.state = if (SudokuVpnService.isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.state = if (isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.updateTile()
     }
 
@@ -54,12 +72,13 @@ class VpnTileService : TileService() {
             // Service is already running in foreground; startService is sufficient and avoids
             // foreground-service start requirements on some devices.
             startService(intent)
-            refreshTile()
+            updateTile(false)
             return
         }
 
         val prepareIntent = VpnService.prepare(this)
         if (prepareIntent != null) {
+            updateTile(false)
             val intent = Intent(this, MainActivity::class.java).apply {
                 putExtra(MainActivity.EXTRA_AUTO_START_VPN, true)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -90,7 +109,7 @@ class VpnTileService : TileService() {
             } else {
                 startService(intent)
             }
-            refreshTile()
+            updateTile(true)
         }
     }
 

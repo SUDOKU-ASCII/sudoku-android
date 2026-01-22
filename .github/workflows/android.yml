@@ -55,7 +55,7 @@ jobs:
             git clone --recursive https://github.com/heiher/hev-socks5-tunnel third_party/hev-socks5-tunnel
           fi
           cd third_party/hev-socks5-tunnel
-          git checkout 47b6cb90f4641ed9b00911ef2c521a9836b60c5b
+          git checkout da33382c7282b4e764408535704f3cd96fea9a14
           git submodule update --init --recursive || true
 
 
