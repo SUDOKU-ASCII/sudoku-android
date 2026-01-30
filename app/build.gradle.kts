@@ -179,8 +179,11 @@ val ensureHevDeps by tasks.registering {
 val ensureSudokuAar by tasks.registering {
     val aar = projectDir.resolve("libs/sudoku.aar")
     inputs.file(rootProject.file("scripts/build_sudoku_aar.sh"))
+    inputs.property("sudokuRef", System.getenv("SUDOKU_REF") ?: "<default>")
+    inputs.property("androidApiLevel", System.getenv("ANDROID_API_LEVEL") ?: "<default>")
+    inputs.property("gomobileTargets", System.getenv("GOMOBILE_TARGETS") ?: "<default>")
+    inputs.property("gomobileBin", System.getenv("GOMOBILE_BIN") ?: "<default>")
     outputs.file(aar)
-    onlyIf { !aar.exists() }
     doLast {
         exec {
             workingDir = rootProject.projectDir

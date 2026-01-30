@@ -4,12 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.1.10}"
+SUDOKU_REF="${SUDOKU_REF:-v0.2.1}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
 GOMOBILE_BIN="${GOMOBILE_BIN:-gomobile}"
 GOMOBILE_TARGETS="${GOMOBILE_TARGETS:-android/arm,android/arm64}"
+KEEP_WORK_DIR="${KEEP_WORK_DIR:-0}"
+SKIP_GOMOBILE_BIND="${SKIP_GOMOBILE_BIND:-0}"
 
 # Ensure gomobile is installed
 if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
@@ -26,9 +28,21 @@ fi
 rm -r "${WORK_DIR}" 2>/dev/null || true
 mkdir -p "${WORK_DIR}"
 
-# Clone sudoku
-echo "Cloning sudoku (${SUDOKU_REF})..."
-git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"
+# Fetch sudoku
+echo "Fetching sudoku (${SUDOKU_REF})..."
+if command -v git >/dev/null 2>&1; then
+  if ! git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"; then
+    echo "git clone failed; falling back to tarball download..."
+    mkdir -p "${SUDOKU_DIR}"
+    curl -fsSL "https://codeload.github.com/SUDOKU-ASCII/sudoku/tar.gz/${SUDOKU_REF}" \
+      | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
+  fi
+else
+  echo "git not found; downloading tarball..."
+  mkdir -p "${SUDOKU_DIR}"
+  curl -fsSL "https://codeload.github.com/SUDOKU-ASCII/sudoku/tar.gz/${SUDOKU_REF}" \
+    | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
+fi
 
 # Inject Mobile Client Implementation into internal/app
 # This allows access to unexported functions like normalizeClientKey and handleMixedConn
@@ -41,7 +55,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strings"
 
 	"github.com/saba-futai/sudoku/internal/config"
 	"github.com/saba-futai/sudoku/internal/tunnel"
@@ -89,10 +102,8 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 		PrivateKey: privateKeyBytes,
 	}
 
-	httpMaskMode := strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMode))
-	httpMaskMux := strings.ToLower(strings.TrimSpace(cfg.HTTPMaskMultiplex))
 	var dialer tunnel.Dialer
-	if !cfg.DisableHTTPMask && (httpMaskMode == "stream" || httpMaskMode == "poll" || httpMaskMode == "auto") && httpMaskMux == "on" {
+	if cfg.HTTPMaskSessionMuxEnabled() {
 		dialer = &tunnel.MuxDialer{BaseDialer: baseDialer}
 		log.Printf("Enabled HTTPMask session mux (single tunnel, multi-target)")
 	} else {
@@ -302,6 +313,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"strings"
 
 	"github.com/saba-futai/sudoku/internal/app"
 	"github.com/saba-futai/sudoku/internal/config"
@@ -328,11 +340,11 @@ func Start(jsonConfig string) error {
 	}
 
 	// Backward compatibility for legacy names.
-	switch cfg.HTTPMaskMode {
+	switch strings.ToLower(strings.TrimSpace(cfg.HTTPMask.Mode)) {
 	case "xhttp":
-		cfg.HTTPMaskMode = "stream"
+		cfg.HTTPMask.Mode = "stream"
 	case "pht":
-		cfg.HTTPMaskMode = "poll"
+		cfg.HTTPMask.Mode = "poll"
 	}
 	if err := cfg.Finalize(); err != nil {
 		return err
@@ -371,18 +383,30 @@ func Stop() {
 EOF
 
 # Build AAR
-echo "Building AAR..."
-mkdir -p "$(dirname "${OUT_AAR}")"
-pushd "${SUDOKU_DIR}" >/dev/null
-go get -d golang.org/x/mobile/bind
-"${GOMOBILE_BIN}" bind \
-  -target="${GOMOBILE_TARGETS}" \
-  -androidapi "${ANDROID_API_LEVEL}" \
-  -javapkg com.futaiii.sudoku \
-  -o "${OUT_AAR}" \
-  ./pkg/mobile
-popd >/dev/null
+if [[ "${SKIP_GOMOBILE_BIND}" == "1" ]]; then
+  echo "Skipping gomobile bind (SKIP_GOMOBILE_BIND=1)"
+else
+  echo "Building AAR..."
+  mkdir -p "$(dirname "${OUT_AAR}")"
+  pushd "${SUDOKU_DIR}" >/dev/null
+  go get -d golang.org/x/mobile/bind
+  "${GOMOBILE_BIN}" bind \
+    -target="${GOMOBILE_TARGETS}" \
+    -androidapi "${ANDROID_API_LEVEL}" \
+    -javapkg com.futaiii.sudoku \
+    -o "${OUT_AAR}" \
+    ./pkg/mobile
+  popd >/dev/null
+fi
 
 # Cleanup
-rm -r "${WORK_DIR}" 2>/dev/null || true
-echo "Generated ${OUT_AAR}"
+if [[ "${KEEP_WORK_DIR}" == "1" ]]; then
+  echo "Keeping ${WORK_DIR} (KEEP_WORK_DIR=1)"
+else
+  rm -r "${WORK_DIR}" 2>/dev/null || true
+fi
+if [[ "${SKIP_GOMOBILE_BIND}" == "1" ]]; then
+  echo "Skipped AAR generation (SKIP_GOMOBILE_BIND=1); expected output: ${OUT_AAR}"
+else
+  echo "Generated ${OUT_AAR}"
+fi
