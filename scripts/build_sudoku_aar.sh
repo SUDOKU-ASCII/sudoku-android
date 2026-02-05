@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-SUDOKU_REF="${SUDOKU_REF:-v0.2.1}"
+SUDOKU_REF="${SUDOKU_REF:-v0.2.2}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
@@ -13,14 +13,16 @@ GOMOBILE_TARGETS="${GOMOBILE_TARGETS:-android/arm,android/arm64}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-0}"
 SKIP_GOMOBILE_BIND="${SKIP_GOMOBILE_BIND:-0}"
 
-# Ensure gomobile is installed
-if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
-  fallback="$(go env GOPATH 2>/dev/null)/bin/gomobile"
-  if [[ -x "${fallback}" ]]; then
-    GOMOBILE_BIN="${fallback}"
-  else
-    echo "gomobile not found. Please install it first (or set GOMOBILE_BIN)."
-    exit 1
+# Ensure gomobile is installed (unless we're explicitly skipping bind)
+if [[ "${SKIP_GOMOBILE_BIND}" != "1" ]]; then
+  if ! command -v "${GOMOBILE_BIN}" >/dev/null 2>&1; then
+    fallback="$(go env GOPATH 2>/dev/null)/bin/gomobile"
+    if [[ -x "${fallback}" ]]; then
+      GOMOBILE_BIN="${fallback}"
+    else
+      echo "gomobile not found. Please install it first (or set GOMOBILE_BIN)."
+      exit 1
+    fi
   fi
 fi
 
