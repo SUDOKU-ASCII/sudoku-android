@@ -175,7 +175,7 @@ val ensureHevDeps by tasks.registering {
             }
             exec {
                 workingDir = hevRoot
-                commandLine("git", "checkout", "47b6cb90f4641ed9b00911ef2c521a9836b60c5b")
+                commandLine("git", "checkout", "da33382c7282b4e764408535704f3cd96fea9a14")
             }
         }
 
