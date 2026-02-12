@@ -1,6 +1,5 @@
 package com.futaiii.sudodroid.protocol
 
-import android.util.Base64
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.HttpMaskMode
@@ -12,6 +11,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.nio.charset.Charset
+import java.util.Base64
 
 object ShortLinkCodec {
     private val json = Json { ignoreUnknownKeys = true }
@@ -21,7 +21,13 @@ object ShortLinkCodec {
     )
 
     fun fromLink(link: String): NodeConfig {
-        val encoded = link.removePrefix("sudoku://").trim()
+        val trimmedLink = link.trim()
+        val encoded = if (trimmedLink.startsWith("sudoku://", ignoreCase = true)) {
+            trimmedLink.substringAfter("://").trim()
+        } else {
+            trimmedLink
+        }
+        require(encoded.isNotEmpty()) { "short link is empty" }
         val raw = decodeBase64Flexible(encoded)
         val payload = json.decodeFromString<Payload>(raw.toString(Charset.forName("UTF-8")))
         val sanitizedHost = payload.host.trim().removeSurrounding("[", "]")
@@ -43,13 +49,13 @@ object ShortLinkCodec {
                 ?: throw IllegalArgumentException("short link has invalid local proxy port")
         }
         val enablePureDownlink = payload.packedDownlink?.let { !it } ?: true
-        val primaryCustomTable = payload.customTable?.trim().orEmpty()
+        val primaryCustomTable = payload.customTable?.trim().orEmpty().lowercase()
         if (primaryCustomTable.isNotEmpty()) {
             NodeInputValidator.requireValidCustomTablePattern(primaryCustomTable)
         }
         val listedTables = payload.customTables
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+            .flatMap { NodeInputValidator.parseCustomTablePatterns(it) }
+            .map { it.lowercase() }
         listedTables.forEach { NodeInputValidator.requireValidCustomTablePattern(it) }
         val customTables = if (listedTables.isNotEmpty()) {
             listedTables
@@ -116,10 +122,9 @@ object ShortLinkCodec {
             }
         )
         val data = json.encodeToString(Payload.serializer(), payload)
-        val encoded = Base64.encodeToString(
-            data.toByteArray(),
-            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
-        )
+        val encoded = Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(data.toByteArray())
         return "sudoku://$encoded"
     }
 
@@ -158,9 +163,18 @@ private fun decodeAscii(raw: String?): AsciiMode {
 }
 
 private fun decodeBase64Flexible(encoded: String): ByteArray {
-    return try {
-        Base64.decode(encoded, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
-    } catch (_: IllegalArgumentException) {
-        Base64.decode(encoded, Base64.DEFAULT)
-    }
+    val sanitized = encoded.filterNot(Char::isWhitespace)
+    val padded = padBase64(sanitized)
+    return runCatching { Base64.getUrlDecoder().decode(padded) }
+        .recoverCatching { Base64.getDecoder().decode(padded) }
+        .recoverCatching {
+            val normalized = padded.replace('-', '+').replace('_', '/')
+            Base64.getDecoder().decode(normalized)
+        }
+        .getOrElse { throw IllegalArgumentException("invalid short link payload", it) }
+}
+
+private fun padBase64(raw: String): String {
+    val remainder = raw.length % 4
+    return if (remainder == 0) raw else raw + "=".repeat(4 - remainder)
 }
