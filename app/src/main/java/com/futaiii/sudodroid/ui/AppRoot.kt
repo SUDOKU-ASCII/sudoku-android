@@ -96,6 +96,7 @@ import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
+import com.futaiii.sudodroid.data.NodeInputValidator
 import com.futaiii.sudodroid.data.ProxyMode
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
 import kotlinx.collections.immutable.ImmutableList
@@ -138,9 +139,10 @@ fun AppRoot(
                 editorInitial = null
             },
             onImportLink = { link, name ->
-                viewModel.importShortLink(link, name)
-                showEditor = false
-                editorInitial = null
+                viewModel.importShortLink(link, name) {
+                    showEditor = false
+                    editorInitial = null
+                }
             }
         )
     }
@@ -935,9 +937,10 @@ private fun buildNodeConfig(
         ?: throw IllegalArgumentException("Invalid server port")
     val parsedLocalPort = localPort.toIntOrNull()?.takeIf { it in 1..65535 }
         ?: throw IllegalArgumentException("Invalid local port")
-    val minPad = paddingMin.toIntOrNull() ?: 0
-    val maxPad = paddingMax.toIntOrNull() ?: 0
+    val minPad = paddingMin.toIntOrNull() ?: throw IllegalArgumentException("Invalid padding min")
+    val maxPad = paddingMax.toIntOrNull() ?: throw IllegalArgumentException("Invalid padding max")
     val (normalizedMin, normalizedMax) = if (minPad <= maxPad) minPad to maxPad else maxPad to minPad
+    NodeInputValidator.requirePaddingPercentRange(normalizedMin, normalizedMax)
     val sanitizedHost = host.trim().removeSurrounding("[", "]")
     if (sanitizedHost.isBlank()) throw IllegalArgumentException("Host cannot be blank")
     if (key.trim().isEmpty()) throw IllegalArgumentException("Key cannot be blank")
@@ -945,15 +948,15 @@ private fun buildNodeConfig(
         .map { it.trim() }
         .filter { it.isNotEmpty() }
     val sanitizedHttpMaskHost = httpMaskHost.trim()
-    val sanitizedHttpMaskPathRoot = normalizeHttpMaskPathRoot(httpMaskPathRoot)
+    val sanitizedHttpMaskPathRoot = NodeInputValidator.requireHttpMaskPathRoot(httpMaskPathRoot)
     val sanitizedHttpMaskMultiplex = if (disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
         HttpMaskMultiplex.OFF
     } else {
         httpMaskMultiplex
     }
 
-    val customTables = parseCustomTablePatterns(customTablesText)
-    customTables.forEach { validateCustomTablePattern(it) }
+    val customTables = NodeInputValidator.parseCustomTablePatterns(customTablesText)
+    customTables.forEach { NodeInputValidator.requireValidCustomTablePattern(it) }
 
     return NodeConfig(
         id = initial?.id ?: UUID.randomUUID().toString(),
@@ -980,42 +983,6 @@ private fun buildNodeConfig(
         customTables = customTables,
         createdAt = initial?.createdAt ?: System.currentTimeMillis()
     )
-}
-
-private fun normalizeHttpMaskPathRoot(raw: String): String {
-    val trimmed = raw.trim().trim('/')
-    if (trimmed.isEmpty()) return ""
-    if (trimmed.contains('/')) {
-        throw IllegalArgumentException("HTTP path root must be a single segment (no '/')")
-    }
-    if (!trimmed.all { it.isLetterOrDigit() || it == '_' || it == '-' }) {
-        throw IllegalArgumentException("HTTP path root may only contain letters, digits, '_' or '-'")
-    }
-    return trimmed
-}
-
-private fun parseCustomTablePatterns(raw: String): List<String> {
-    return raw
-        .trim()
-        .split(Regex("[\\s,;]+"))
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-}
-
-private fun validateCustomTablePattern(pattern: String) {
-    val p = pattern.trim().lowercase()
-    if (p.isEmpty()) return
-    if (p.length != 8) {
-        throw IllegalArgumentException("Custom table must be 8 chars (got ${p.length}): $pattern")
-    }
-    val allowed = setOf('x', 'p', 'v')
-    if (p.any { it !in allowed }) {
-        throw IllegalArgumentException("Custom table must only contain x/p/v: $pattern")
-    }
-    val counts = p.groupingBy { it }.eachCount()
-    if (counts.getOrDefault('x', 0) != 2 || counts.getOrDefault('p', 0) != 2 || counts.getOrDefault('v', 0) != 4) {
-        throw IllegalArgumentException("Custom table must contain 2x, 2p, 4v: $pattern")
-    }
 }
 
 @Composable

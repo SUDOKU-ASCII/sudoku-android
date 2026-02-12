@@ -113,14 +113,15 @@ class AppViewModel(
         }
     }
 
-    fun importShortLink(link: String, nameOverride: String?) {
+    fun importShortLink(link: String, nameOverride: String?, onSuccess: (() -> Unit)? = null) {
         viewModelScope.launch {
             runCatching { repo.importShortLink(link, nameOverride) }
                 .onSuccess { imported -> 
                     activeId.value = imported.id
                     repo.saveActiveId(imported.id)
+                    onSuccess?.invoke()
                 }
-                .onFailure { error.value = it.message }
+                .onFailure { error.value = it.message ?: "Import failed" }
         }
     }
 

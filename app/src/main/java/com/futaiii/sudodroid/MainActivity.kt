@@ -5,6 +5,7 @@ import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
@@ -17,6 +18,13 @@ import com.futaiii.sudodroid.vpn.SudokuVpnService
 import android.os.Build
 
 class MainActivity : ComponentActivity() {
+    private val vpnPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                startVpnService()
+            }
+        }
+
     private val viewModel: AppViewModel by viewModels {
         AppViewModelFactory((application as SudodroidApp).nodeRepository, application)
     }
@@ -61,24 +69,21 @@ class MainActivity : ComponentActivity() {
     private fun startVpn() {
         val intent = VpnService.prepare(this)
         if (intent != null) {
-            startActivityForResult(intent, REQUEST_VPN)
+            vpnPermissionLauncher.launch(intent)
         } else {
-            onActivityResult(REQUEST_VPN, RESULT_OK, null)
+            startVpnService()
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_VPN && resultCode == RESULT_OK) {
-            val activeId = viewModel.state.value.activeId
-            val intent = Intent(this, SudokuVpnService::class.java).apply {
-                putExtra(SudokuVpnService.EXTRA_NODE_ID, activeId)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+    private fun startVpnService() {
+        val activeId = viewModel.state.value.activeId
+        val intent = Intent(this, SudokuVpnService::class.java).apply {
+            putExtra(SudokuVpnService.EXTRA_NODE_ID, activeId)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
         }
     }
 
@@ -100,7 +105,6 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        private const val REQUEST_VPN = 100
         const val EXTRA_AUTO_START_VPN = "com.futaiii.sudodroid.extra.AUTO_START_VPN"
     }
 }

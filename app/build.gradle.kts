@@ -150,18 +150,24 @@ dependencies {
 
 // Ensure hev-socks5-tunnel submodules are present even when the repo is from a zip without submodules.
 val ensureHevDeps by tasks.registering {
+    val root = project.rootDir
+    val hevRoot = root.resolve("third_party/hev-socks5-tunnel")
+    val deps = listOf(
+        hevRoot.resolve("Android.mk"),
+        hevRoot.resolve("build.mk"),
+        hevRoot.resolve("third-part/yaml/Android.mk"),
+        hevRoot.resolve("third-part/lwip/Android.mk"),
+        hevRoot.resolve("third-part/hev-task-system/Android.mk")
+    )
+    outputs.files(deps)
     doLast {
-        val root = project.rootDir
-        val hevRoot = root.resolve("third_party/hev-socks5-tunnel")
-        val deps = listOf(
-            hevRoot.resolve("Android.mk"),
-            hevRoot.resolve("build.mk"),
-            hevRoot.resolve("third-part/yaml/Android.mk"),
-            hevRoot.resolve("third-part/lwip/Android.mk"),
-            hevRoot.resolve("third-part/hev-task-system/Android.mk")
-        )
+        if (deps.all { it.exists() }) {
+            logger.lifecycle("hev-socks5-tunnel dependencies already present; skipping fetch")
+            return@doLast
+        }
+
         if (!hevRoot.exists()) {
-            logger.lifecycle("Cloning hev-socks5-tunnel into jni directory")
+            logger.lifecycle("Cloning hev-socks5-tunnel into third_party directory")
             hevRoot.parentFile.mkdirs()
             exec {
                 workingDir = root
@@ -172,12 +178,18 @@ val ensureHevDeps by tasks.registering {
                 commandLine("git", "checkout", "47b6cb90f4641ed9b00911ef2c521a9836b60c5b")
             }
         }
-        exec {
-            workingDir = hevRoot
-            commandLine("git", "submodule", "update", "--init", "--recursive")
+
+        if (hevRoot.resolve(".git").exists()) {
+            exec {
+                workingDir = hevRoot
+                commandLine("git", "submodule", "update", "--init", "--recursive")
+            }
+        } else {
+            logger.warn("hev-socks5-tunnel exists but is not a git checkout; skipping submodule update")
         }
+
         check(deps.all { it.exists() }) {
-            "Failed to fetch hev-socks5-tunnel dependencies under app/src/main/jni; please ensure git and network are available."
+            "Failed to fetch hev-socks5-tunnel dependencies under third_party/hev-socks5-tunnel; please ensure git and network are available."
         }
     }
 }
@@ -201,5 +213,5 @@ val ensureSudokuAar by tasks.registering {
 }
 
 tasks.named("preBuild").configure {
-    dependsOn(ensureSudokuAar)
+    dependsOn(ensureHevDeps, ensureSudokuAar)
 }

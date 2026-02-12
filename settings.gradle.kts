@@ -15,7 +15,7 @@ dependencyResolutionManagement {
         mavenCentral()
         maven("https://jitpack.io")
         flatDir {
-            dirs("${rootDir}/sudodroid/app/libs")
+            dirs("${rootDir}/app/libs")
         }
     }
 }

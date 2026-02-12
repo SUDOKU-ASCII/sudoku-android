@@ -6,6 +6,7 @@ import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
+import com.futaiii.sudodroid.data.NodeInputValidator
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -47,7 +48,7 @@ object ShortLinkCodec {
         val effectivePrimaryTable = primaryCustomTable.ifEmpty { customTables.firstOrNull().orEmpty() }
         val httpMaskMode = HttpMaskMode.fromWire(payload.httpMaskMode)
         val httpMaskHost = payload.httpMaskHost?.trim().orEmpty()
-        val httpMaskPathRoot = normalizeHttpMaskPathRoot(payload.httpMaskPath)
+        val httpMaskPathRoot = NodeInputValidator.normalizeHttpMaskPathRoot(payload.httpMaskPath)
         val httpMaskMultiplex = if (payload.disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
             HttpMaskMultiplex.OFF
         } else {
@@ -99,7 +100,7 @@ object ShortLinkCodec {
             httpMaskMode = node.httpMaskMode.wireValue.takeUnless { node.httpMaskMode == HttpMaskMode.LEGACY },
             httpMaskTls = node.httpMaskTls,
             httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() },
-            httpMaskPath = normalizeHttpMaskPathRoot(node.httpMaskPathRoot).takeIf { it.isNotBlank() },
+            httpMaskPath = NodeInputValidator.normalizeHttpMaskPathRoot(node.httpMaskPathRoot).takeIf { it.isNotBlank() },
             httpMaskMux = node.httpMaskMultiplex.wireValue.takeUnless {
                 node.disableHttpMask || it == HttpMaskMultiplex.OFF.wireValue
             }
@@ -152,12 +153,4 @@ private fun decodeBase64Flexible(encoded: String): ByteArray {
     } catch (_: IllegalArgumentException) {
         Base64.decode(encoded, Base64.DEFAULT)
     }
-}
-
-private fun normalizeHttpMaskPathRoot(raw: String?): String {
-    val trimmed = raw.orEmpty().trim().trim('/')
-    if (trimmed.isEmpty()) return ""
-    if (trimmed.contains('/')) return ""
-    if (!trimmed.all { it.isLetterOrDigit() || it == '_' || it == '-' }) return ""
-    return trimmed
 }
