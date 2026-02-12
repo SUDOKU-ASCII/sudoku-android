@@ -24,8 +24,11 @@ object ShortLinkCodec {
         val encoded = link.removePrefix("sudoku://").trim()
         val raw = decodeBase64Flexible(encoded)
         val payload = json.decodeFromString<Payload>(raw.toString(Charset.forName("UTF-8")))
-
-        require(payload.host.isNotBlank() && payload.port > 0 && !payload.key.isNullOrBlank()) {
+        val sanitizedHost = payload.host.trim().removeSurrounding("[", "]")
+        val serverPort = payload.port.takeIf { it in 1..65535 }
+            ?: throw IllegalArgumentException("short link has invalid server port")
+        val key = payload.key?.trim().orEmpty()
+        require(sanitizedHost.isNotBlank() && key.isNotEmpty()) {
             "short link missing required fields"
         }
 
@@ -34,12 +37,20 @@ object ShortLinkCodec {
             null, "" -> AeadMode.NONE
             else -> AeadMode.fromWire(payload.aead)
         }
-        val local = if (payload.mixPort == null || payload.mixPort == 0) 1080 else payload.mixPort
+        val local = when (val port = payload.mixPort) {
+            null, 0 -> 1080
+            else -> port.takeIf { it in 1..65535 }
+                ?: throw IllegalArgumentException("short link has invalid local proxy port")
+        }
         val enablePureDownlink = payload.packedDownlink?.let { !it } ?: true
         val primaryCustomTable = payload.customTable?.trim().orEmpty()
+        if (primaryCustomTable.isNotEmpty()) {
+            NodeInputValidator.requireValidCustomTablePattern(primaryCustomTable)
+        }
         val listedTables = payload.customTables
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+        listedTables.forEach { NodeInputValidator.requireValidCustomTablePattern(it) }
         val customTables = if (listedTables.isNotEmpty()) {
             listedTables
         } else {
@@ -54,13 +65,12 @@ object ShortLinkCodec {
         } else {
             HttpMaskMultiplex.fromWire(payload.httpMaskMux)
         }
-        val sanitizedHost = payload.host.trim().removeSurrounding("[", "]")
 
         return NodeConfig(
             name = sanitizedHost,
             host = sanitizedHost,
-            port = payload.port,
-            key = payload.key ?: "",
+            port = serverPort,
+            key = key,
             asciiMode = ascii,
             aead = aead,
             enablePureDownlink = enablePureDownlink,
