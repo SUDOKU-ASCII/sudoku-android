@@ -98,6 +98,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
       - name: Prepare signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
