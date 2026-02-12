@@ -13,9 +13,15 @@ val computedVersionName: String = tagVersionName ?: "0.1.0"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
-    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
-    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
-    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    fun parsePart(index: Int): Int {
+        val part = parts.getOrNull(index).orEmpty()
+        val numericPrefix = part.takeWhile { it.isDigit() }
+        return numericPrefix.toIntOrNull() ?: 0
+    }
+
+    val major = parsePart(0)
+    val minor = parsePart(1)
+    val patch = parsePart(2)
     return major * 10000 + minor * 100 + patch
 }
 
