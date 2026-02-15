@@ -10,6 +10,7 @@ import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
 import com.futaiii.sudodroid.data.ProxyMode
+import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.net.ServerAddressResolver
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
@@ -220,7 +221,11 @@ class AppViewModel(
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
 
-            val finalRuleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList()
+            val finalRuleUrls = if (proxyMode == ProxyMode.PAC) {
+                if (sanitizedRuleUrls.isEmpty()) DEFAULT_PAC_RULE_URLS else sanitizedRuleUrls
+            } else {
+                emptyList()
+            }
             repo.saveGlobalProxySettings(
                 GlobalProxySettings(
                     proxyMode = proxyMode,

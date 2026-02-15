@@ -19,14 +19,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -57,6 +57,8 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -69,8 +71,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,12 +94,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
+import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
@@ -109,6 +117,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+private enum class RunningMode {
+    VPN,
+    PROXY_ONLY
+}
+
 @Composable
 fun AppRoot(
     viewModel: AppViewModel,
@@ -119,11 +132,14 @@ fun AppRoot(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val defaultPacRuleUrlsText = remember { DEFAULT_PAC_RULE_URLS.joinToString("\n") }
     var editorInitial by remember { mutableStateOf<NodeConfig?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<NodeConfig?>(null) }
     var pendingSwitch by remember { mutableStateOf<NodeConfig?>(null) }
+    var runningMode by rememberSaveable { mutableStateOf(RunningMode.VPN) }
     var reverseDialUrl by rememberSaveable { mutableStateOf("wss://example.com:8081/ssh") }
     var reverseListenAddr by rememberSaveable { mutableStateOf("127.0.0.1:2222") }
     var reverseInsecure by rememberSaveable { mutableStateOf(false) }
@@ -151,7 +167,18 @@ fun AppRoot(
     LaunchedEffect(state.globalProxySettings) {
         globalProxyMode = state.globalProxySettings.proxyMode
         globalIpMode = state.globalProxySettings.ipMode
-        globalRuleUrlsText = state.globalProxySettings.ruleUrls.joinToString("\n")
+        globalRuleUrlsText = when {
+            state.globalProxySettings.ruleUrls.isNotEmpty() -> state.globalProxySettings.ruleUrls.joinToString("\n")
+            state.globalProxySettings.proxyMode == ProxyMode.PAC -> defaultPacRuleUrlsText
+            else -> ""
+        }
+    }
+
+    LaunchedEffect(state.isVpnRunning, state.isProxyOnlyRunning) {
+        when {
+            state.isProxyOnlyRunning -> runningMode = RunningMode.PROXY_ONLY
+            state.isVpnRunning -> runningMode = RunningMode.VPN
+        }
     }
 
     if (showEditor) {
@@ -203,126 +230,205 @@ fun AppRoot(
         )
     }
 
-    Scaffold(
-        modifier = Modifier.statusBarsPadding(),
-        topBar = {
-            SudodroidTopBar(
-                isVpnRunning = state.isVpnRunning,
-                isProxyOnlyRunning = state.isProxyOnlyRunning,
-                activeNode = activeNode,
-                onLongPressTitle = {
-                    if (activeNode == null) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Please add/select a node first")
-                        }
-                    } else {
-                        when {
-                            state.isVpnRunning -> {
-                                onToggleVpn(true)
-                                scope.launch {
-                                    delay(700)
-                                    onToggleProxyOnly(false)
-                                    snackbarHostState.showSnackbar("Switching to proxy-only mode...")
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        drawerContent = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                ModalDrawerSheet(
+                    modifier = Modifier.fillMaxWidth(0.92f)
+                ) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Global Settings",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(Modifier.weight(1f))
+                                IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close settings")
                                 }
                             }
 
-                            state.isProxyOnlyRunning -> {
-                                onToggleProxyOnly(true)
-                                scope.launch {
-                                    delay(700)
-                                    onToggleVpn(false)
-                                    snackbarHostState.showSnackbar("Switching to VPN mode...")
-                                }
-                            }
-
-                            else -> {
-                                onToggleVpn(false)
-                                scope.launch { snackbarHostState.showSnackbar("VPN mode started") }
-                            }
-                        }
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    editorInitial = null
-                    showEditor = true
-                }
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add node")
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-        ) {
-            SectionHeader(title = "Settings")
-            Spacer(Modifier.height(8.dp))
-
-            GlobalSettingsCard(
-                proxyMode = globalProxyMode,
-                ipMode = globalIpMode,
-                ruleUrls = globalRuleUrlsText,
-                onProxyModeChange = { globalProxyMode = it },
-                onIpModeChange = { globalIpMode = it },
-                onRuleUrlsChange = { globalRuleUrlsText = it },
-                onSave = {
-                    viewModel.updateGlobalProxySettings(
-                        proxyMode = globalProxyMode,
-                        ipMode = globalIpMode,
-                        ruleUrlsText = globalRuleUrlsText
-                    )
-                    scope.launch {
-                        snackbarHostState.showSnackbar("Global network settings saved")
-                    }
-                }
-            )
-
-            Spacer(Modifier.height(16.dp))
-            SectionHeader(title = "Nodes")
-            Spacer(Modifier.height(8.dp))
-
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.nodes.isEmpty()) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            EmptyState(
-                                onAddNode = {
-                                    editorInitial = null
-                                    showEditor = true
+                            GlobalSettingsCard(
+                                proxyMode = globalProxyMode,
+                                ipMode = globalIpMode,
+                                ruleUrls = globalRuleUrlsText,
+                                onProxyModeChange = { mode ->
+                                    globalProxyMode = mode
+                                    if (mode == ProxyMode.PAC && globalRuleUrlsText.lines().none { it.isNotBlank() }) {
+                                        globalRuleUrlsText = defaultPacRuleUrlsText
+                                    }
+                                },
+                                onIpModeChange = { globalIpMode = it },
+                                onRuleUrlsChange = { globalRuleUrlsText = it },
+                                onSave = {
+                                    viewModel.updateGlobalProxySettings(
+                                        proxyMode = globalProxyMode,
+                                        ipMode = globalIpMode,
+                                        ruleUrlsText = globalRuleUrlsText
+                                    )
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Global network settings saved")
+                                    }
                                 }
                             )
+
+                            ReverseForwarderCard(
+                                isVpnRunning = state.isVpnRunning,
+                                isProxyOnlyRunning = state.isProxyOnlyRunning,
+                                status = state.reverseForwardStatus,
+                                isBusy = state.reverseForwardBusy,
+                                dialUrl = reverseDialUrl,
+                                listenAddr = reverseListenAddr,
+                                insecure = reverseInsecure,
+                                onDialUrlChange = { reverseDialUrl = it },
+                                onListenAddrChange = { reverseListenAddr = it },
+                                onInsecureChange = { reverseInsecure = it },
+                                onStart = {
+                                    viewModel.startReverseForwarder(
+                                        listenAddr = reverseListenAddr,
+                                        dialUrl = reverseDialUrl,
+                                        insecure = reverseInsecure
+                                    )
+                                },
+                                onStop = { viewModel.stopReverseForwarder() }
+                            )
+                            Spacer(Modifier.height(20.dp))
                         }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        ReverseForwarderCard(
-                            isVpnRunning = state.isVpnRunning,
-                            isProxyOnlyRunning = state.isProxyOnlyRunning,
-                            status = state.reverseForwardStatus,
-                            isBusy = state.reverseForwardBusy,
-                            dialUrl = reverseDialUrl,
-                            listenAddr = reverseListenAddr,
-                            insecure = reverseInsecure,
-                            onDialUrlChange = { reverseDialUrl = it },
-                            onListenAddrChange = { reverseListenAddr = it },
-                            onInsecureChange = { reverseInsecure = it },
-                            onStart = {
-                                viewModel.startReverseForwarder(
-                                    listenAddr = reverseListenAddr,
-                                    dialUrl = reverseDialUrl,
-                                    insecure = reverseInsecure
-                                )
-                            },
-                            onStop = { viewModel.stopReverseForwarder() }
-                        )
                     }
+                }
+            }
+        }
+    ) {
+        Scaffold(
+            modifier = Modifier.statusBarsPadding(),
+            topBar = {
+                SudodroidTopBar(
+                    runningMode = runningMode,
+                    isVpnRunning = state.isVpnRunning,
+                    isProxyOnlyRunning = state.isProxyOnlyRunning,
+                    activeNode = activeNode,
+                    onToggleMode = {
+                        if (activeNode == null) {
+                            scope.launch { snackbarHostState.showSnackbar("Please add/select a node first") }
+                        } else {
+                            when (runningMode) {
+                                RunningMode.VPN -> {
+                                    if (state.isVpnRunning) {
+                                        onToggleVpn(true)
+                                        scope.launch { snackbarHostState.showSnackbar("VPN stopped") }
+                                    } else {
+                                        if (state.isProxyOnlyRunning) {
+                                            onToggleProxyOnly(true)
+                                            scope.launch {
+                                                delay(700)
+                                                onToggleVpn(false)
+                                                snackbarHostState.showSnackbar("VPN mode started")
+                                            }
+                                        } else {
+                                            onToggleVpn(false)
+                                            scope.launch { snackbarHostState.showSnackbar("VPN mode started") }
+                                        }
+                                    }
+                                }
+
+                                RunningMode.PROXY_ONLY -> {
+                                    if (state.isProxyOnlyRunning) {
+                                        onToggleProxyOnly(true)
+                                        scope.launch { snackbarHostState.showSnackbar("Proxy-only mode stopped") }
+                                    } else {
+                                        if (state.isVpnRunning) {
+                                            onToggleVpn(true)
+                                            scope.launch {
+                                                delay(700)
+                                                onToggleProxyOnly(false)
+                                                snackbarHostState.showSnackbar("Proxy-only mode started")
+                                            }
+                                        } else {
+                                            onToggleProxyOnly(false)
+                                            scope.launch { snackbarHostState.showSnackbar("Proxy-only mode started") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onLongPressTitle = {
+                        if (activeNode == null) {
+                            scope.launch { snackbarHostState.showSnackbar("Please add/select a node first") }
+                        } else {
+                            when (runningMode) {
+                                RunningMode.VPN -> {
+                                    runningMode = RunningMode.PROXY_ONLY
+                                    if (state.isVpnRunning) {
+                                        onToggleVpn(true)
+                                        scope.launch {
+                                            delay(700)
+                                            onToggleProxyOnly(false)
+                                            snackbarHostState.showSnackbar("Switched to proxy-only mode")
+                                        }
+                                    } else {
+                                        scope.launch { snackbarHostState.showSnackbar("Switched to proxy-only mode") }
+                                    }
+                                }
+
+                                RunningMode.PROXY_ONLY -> {
+                                    runningMode = RunningMode.VPN
+                                    if (state.isProxyOnlyRunning) {
+                                        onToggleProxyOnly(true)
+                                        scope.launch {
+                                            delay(700)
+                                            onToggleVpn(false)
+                                            snackbarHostState.showSnackbar("Switched to VPN mode")
+                                        }
+                                    } else {
+                                        scope.launch { snackbarHostState.showSnackbar("Switched to VPN mode") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = {
+                        editorInitial = null
+                        showEditor = true
+                    }
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add node")
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp)
+            ) {
+                if (state.nodes.isEmpty()) {
+                    EmptyState(
+                        onAddNode = {
+                            editorInitial = null
+                            showEditor = true
+                        }
+                    )
                 } else {
                     NodeList(
                         nodes = state.nodes,
@@ -346,28 +452,6 @@ fun AppRoot(
                             scope.launch {
                                 snackbarHostState.showSnackbar("Copied short link")
                             }
-                        },
-                        footer = {
-                            ReverseForwarderCard(
-                                isVpnRunning = state.isVpnRunning,
-                                isProxyOnlyRunning = state.isProxyOnlyRunning,
-                                status = state.reverseForwardStatus,
-                                isBusy = state.reverseForwardBusy,
-                                dialUrl = reverseDialUrl,
-                                listenAddr = reverseListenAddr,
-                                insecure = reverseInsecure,
-                                onDialUrlChange = { reverseDialUrl = it },
-                                onListenAddrChange = { reverseListenAddr = it },
-                                onInsecureChange = { reverseInsecure = it },
-                                onStart = {
-                                    viewModel.startReverseForwarder(
-                                        listenAddr = reverseListenAddr,
-                                        dialUrl = reverseDialUrl,
-                                        insecure = reverseInsecure
-                                    )
-                                },
-                                onStop = { viewModel.stopReverseForwarder() }
-                            )
                         }
                     )
                 }
@@ -378,11 +462,23 @@ fun AppRoot(
 
 @Composable
 private fun SudodroidTopBar(
+    runningMode: RunningMode,
     isVpnRunning: Boolean,
     isProxyOnlyRunning: Boolean,
     activeNode: NodeConfig?,
+    onToggleMode: () -> Unit,
+    onOpenDrawer: () -> Unit,
     onLongPressTitle: () -> Unit
 ) {
+    val selectedModeRunning = when (runningMode) {
+        RunningMode.VPN -> isVpnRunning
+        RunningMode.PROXY_ONLY -> isProxyOnlyRunning
+    }
+    val buttonLabel = when (runningMode) {
+        RunningMode.VPN -> if (selectedModeRunning) "Stop VPN" else "Start VPN"
+        RunningMode.PROXY_ONLY -> if (selectedModeRunning) "Stop Proxy-only" else "Start Proxy-only"
+    }
+
     LargeTopAppBar(
         title = {
             Column {
@@ -407,10 +503,44 @@ private fun SudodroidTopBar(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "Long press Sudodroid title to switch VPN / Proxy-only",
+                    "Long press title to switch VPN / Proxy-only",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        },
+        actions = {
+            FilledTonalButton(
+                onClick = onToggleMode,
+                enabled = activeNode != null,
+                colors = when (runningMode) {
+                    RunningMode.VPN -> if (selectedModeRunning) {
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    } else {
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    RunningMode.PROXY_ONLY -> ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            ) {
+                Icon(
+                    if (selectedModeRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = null
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(buttonLabel)
+            }
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Outlined.Tune, contentDescription = "Open settings")
             }
         },
         colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -457,7 +587,14 @@ private fun GlobalSettingsCard(
                         selected = ipMode == mode,
                         onClick = { onIpModeChange(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index, IpMode.entries.size),
-                        label = { Text(mode.label) }
+                        modifier = Modifier.height(40.dp),
+                        label = {
+                            Text(
+                                mode.label,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     )
                 }
             }
@@ -469,7 +606,14 @@ private fun GlobalSettingsCard(
                         selected = proxyMode == mode,
                         onClick = { onProxyModeChange(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index, ProxyMode.entries.size),
-                        label = { Text(mode.label) }
+                        modifier = Modifier.height(40.dp),
+                        label = {
+                            Text(
+                                mode.label,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     )
                 }
             }
@@ -677,13 +821,10 @@ private fun NodeList(
     onPing: (NodeConfig) -> Unit,
     onEdit: (NodeConfig) -> Unit,
     onDelete: (NodeConfig) -> Unit,
-    onCopyLink: (NodeConfig) -> Unit,
-    footer: (@Composable () -> Unit)? = null
+    onCopyLink: (NodeConfig) -> Unit
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 96.dp, top = 16.dp)
     ) {
@@ -697,12 +838,6 @@ private fun NodeList(
                 onDelete = { onDelete(nodeUi.node) },
                 onCopyLink = { onCopyLink(nodeUi.node) }
             )
-        }
-
-        if (footer != null) {
-            item(span = { GridItemSpan(2) }) {
-                footer()
-            }
         }
     }
 }
@@ -831,16 +966,6 @@ private fun formatHostPort(host: String, port: Int): String {
     } else {
         "$sanitized:$port"
     }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontWeight = FontWeight.SemiBold
-    )
 }
 
 @Composable
