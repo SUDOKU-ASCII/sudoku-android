@@ -102,9 +102,13 @@ jobs:
         id: unit_tests
         continue-on-error: true
         run: |
+          set +e
           set -o pipefail
           ./gradlew :app:testDebugUnitTest --stacktrace 2>&1 | tee /tmp/unit-tests.log
-          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload unit test log
         if: always()
@@ -158,9 +162,13 @@ jobs:
         env:
           ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
         run: |
+          set +e
           set -o pipefail
           ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee /tmp/build-apk.log
-          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload build APK log
         if: always()

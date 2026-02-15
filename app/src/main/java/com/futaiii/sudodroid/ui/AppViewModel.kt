@@ -88,9 +88,8 @@ class AppViewModel(
         activeId,
         latencyMap,
         reverseForwardStatus,
-        reverseForwardBusy,
-        error
-    ) { nodes, active, latency, reverseStatus, reverseBusy, err ->
+        reverseForwardBusy
+    ) { nodes, active, latency, reverseStatus, reverseBusy ->
         AppState(
             nodes = nodes.map {
                 NodeUi(
@@ -101,15 +100,15 @@ class AppViewModel(
             }.toImmutableList(),
             activeId = active,
             reverseForwardStatus = reverseStatus,
-            reverseForwardBusy = reverseBusy,
-            error = err
+            reverseForwardBusy = reverseBusy
         )
     }
 
     val state: StateFlow<AppState> = combine(
         baseState,
-        SudokuVpnService.status
-    ) { base, vpnRunning -> base.copy(isVpnRunning = vpnRunning) }
+        SudokuVpnService.status,
+        error
+    ) { base, vpnRunning, err -> base.copy(isVpnRunning = vpnRunning, error = err) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
     fun selectNode(id: String) {
