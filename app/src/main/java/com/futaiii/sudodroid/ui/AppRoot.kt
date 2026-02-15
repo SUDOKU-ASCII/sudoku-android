@@ -75,7 +75,6 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,9 +93,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -234,81 +231,77 @@ fun AppRoot(
         drawerState = drawerState,
         gesturesEnabled = true,
         drawerContent = {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                ModalDrawerSheet(
-                    modifier = Modifier.fillMaxWidth(0.92f)
+            ModalDrawerSheet(
+                modifier = Modifier.fillMaxWidth(0.92f)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Spacer(Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Global Settings",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Spacer(Modifier.weight(1f))
-                                IconButton(onClick = { scope.launch { drawerState.close() } }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Close settings")
-                                }
-                            }
-
-                            GlobalSettingsCard(
-                                proxyMode = globalProxyMode,
-                                ipMode = globalIpMode,
-                                ruleUrls = globalRuleUrlsText,
-                                onProxyModeChange = { mode ->
-                                    globalProxyMode = mode
-                                    if (mode == ProxyMode.PAC && globalRuleUrlsText.lines().none { it.isNotBlank() }) {
-                                        globalRuleUrlsText = defaultPacRuleUrlsText
-                                    }
-                                },
-                                onIpModeChange = { globalIpMode = it },
-                                onRuleUrlsChange = { globalRuleUrlsText = it },
-                                onSave = {
-                                    viewModel.updateGlobalProxySettings(
-                                        proxyMode = globalProxyMode,
-                                        ipMode = globalIpMode,
-                                        ruleUrlsText = globalRuleUrlsText
-                                    )
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Global network settings saved")
-                                    }
-                                }
-                            )
-
-                            ReverseForwarderCard(
-                                isVpnRunning = state.isVpnRunning,
-                                isProxyOnlyRunning = state.isProxyOnlyRunning,
-                                status = state.reverseForwardStatus,
-                                isBusy = state.reverseForwardBusy,
-                                dialUrl = reverseDialUrl,
-                                listenAddr = reverseListenAddr,
-                                insecure = reverseInsecure,
-                                onDialUrlChange = { reverseDialUrl = it },
-                                onListenAddrChange = { reverseListenAddr = it },
-                                onInsecureChange = { reverseInsecure = it },
-                                onStart = {
-                                    viewModel.startReverseForwarder(
-                                        listenAddr = reverseListenAddr,
-                                        dialUrl = reverseDialUrl,
-                                        insecure = reverseInsecure
-                                    )
-                                },
-                                onStop = { viewModel.stopReverseForwarder() }
-                            )
-                            Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Global Settings",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close settings")
                         }
                     }
+
+                    GlobalSettingsCard(
+                        proxyMode = globalProxyMode,
+                        ipMode = globalIpMode,
+                        ruleUrls = globalRuleUrlsText,
+                        onProxyModeChange = { mode ->
+                            globalProxyMode = mode
+                            if (mode == ProxyMode.PAC && globalRuleUrlsText.lines().none { it.isNotBlank() }) {
+                                globalRuleUrlsText = defaultPacRuleUrlsText
+                            }
+                        },
+                        onIpModeChange = { globalIpMode = it },
+                        onRuleUrlsChange = { globalRuleUrlsText = it },
+                        onSave = {
+                            viewModel.updateGlobalProxySettings(
+                                proxyMode = globalProxyMode,
+                                ipMode = globalIpMode,
+                                ruleUrlsText = globalRuleUrlsText
+                            )
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Global network settings saved")
+                            }
+                        }
+                    )
+
+                    ReverseForwarderCard(
+                        isVpnRunning = state.isVpnRunning,
+                        isProxyOnlyRunning = state.isProxyOnlyRunning,
+                        status = state.reverseForwardStatus,
+                        isBusy = state.reverseForwardBusy,
+                        dialUrl = reverseDialUrl,
+                        listenAddr = reverseListenAddr,
+                        insecure = reverseInsecure,
+                        onDialUrlChange = { reverseDialUrl = it },
+                        onListenAddrChange = { reverseListenAddr = it },
+                        onInsecureChange = { reverseInsecure = it },
+                        onStart = {
+                            viewModel.startReverseForwarder(
+                                listenAddr = reverseListenAddr,
+                                dialUrl = reverseDialUrl,
+                                insecure = reverseInsecure
+                            )
+                        },
+                        onStop = { viewModel.stopReverseForwarder() }
+                    )
+                    Spacer(Modifier.height(20.dp))
                 }
             }
         }
@@ -502,11 +495,6 @@ private fun SudodroidTopBar(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    "Long press title to switch VPN / Proxy-only",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         },
         actions = {
@@ -574,11 +562,6 @@ private fun GlobalSettingsCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            Text(
-                text = "DNS preference and PAC routing are now shared by all nodes.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
 
             Text("IP version preference", style = MaterialTheme.typography.labelMedium)
             SingleChoiceSegmentedButtonRow {
@@ -590,7 +573,11 @@ private fun GlobalSettingsCard(
                         modifier = Modifier.height(40.dp),
                         label = {
                             Text(
-                                mode.label,
+                                when (mode) {
+                                    IpMode.DEFAULT -> "Default"
+                                    IpMode.IPV4_ONLY -> "IPv4"
+                                    IpMode.IPV6_PREFERRED -> "IPv6"
+                                },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -672,11 +659,6 @@ private fun ReverseForwarderCard(
                         text = "Local Port Forwarder",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Run reverse TCP-over-WebSocket without starting VPN",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 AssistChip(
