@@ -257,6 +257,9 @@ fun AppRoot(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
+            SectionHeader(title = "Settings")
+            Spacer(Modifier.height(8.dp))
+
             GlobalSettingsCard(
                 proxyMode = globalProxyMode,
                 ipMode = globalIpMode,
@@ -276,7 +279,9 @@ fun AppRoot(
                 }
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
+            SectionHeader(title = "Nodes")
+            Spacer(Modifier.height(8.dp))
 
             Box(modifier = Modifier.weight(1f)) {
                 if (state.nodes.isEmpty()) {
@@ -376,12 +381,14 @@ private fun SudodroidTopBar(
 ) {
     LargeTopAppBar(
         title = {
-            Column(
-                modifier = Modifier.pointerInput(isVpnRunning, isProxyOnlyRunning) {
-                    detectTapGestures(onLongPress = { onLongPressTitle() })
-                }
-            ) {
-                Text("Sudodroid", style = MaterialTheme.typography.headlineSmall)
+            Column {
+                Text(
+                    "Sudodroid",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.pointerInput(isVpnRunning, isProxyOnlyRunning) {
+                        detectTapGestures(onLongPress = { onLongPressTitle() })
+                    }
+                )
                 val subtitle = when {
                     isVpnRunning && activeNode != null -> "VPN connected to ${activeNode.name.ifBlank { activeNode.host }}"
                     isProxyOnlyRunning && activeNode != null -> "Proxy-only on ${activeNode.name.ifBlank { activeNode.host }}"
@@ -841,6 +848,16 @@ private fun formatHostPort(host: String, port: Int): String {
     } else {
         "$sanitized:$port"
     }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.SemiBold
+    )
 }
 
 @Composable
