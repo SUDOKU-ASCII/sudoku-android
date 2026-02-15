@@ -25,6 +25,14 @@ object GoCoreClient {
         private val stopMethod = mobileClass?.getMethod("stop")
         private val trafficMethod = mobileClass?.getMethod("getTrafficStatsJson")
         private val resetTrafficMethod = mobileClass?.getMethod("resetTrafficStats")
+        private val startReverseForwarderMethod = mobileClass?.getMethod(
+            "startReverseForwarder",
+            String::class.java,
+            String::class.java,
+            java.lang.Boolean.TYPE
+        )
+        private val stopReverseForwarderMethod = mobileClass?.getMethod("stopReverseForwarder")
+        private val reverseStatusMethod = mobileClass?.getMethod("getReverseForwardStatusJson")
 
         fun start(configJson: String) {
             val method = startMethod ?: error("Sudoku core AAR missing; run scripts/build_sudoku_aar.sh to generate $MOBILE_CLASS")
@@ -60,6 +68,33 @@ object GoCoreClient {
                 Log.w(TAG, "Failed to reset Go core traffic stats", e)
             }
         }
+
+        fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
+            val method = startReverseForwarderMethod
+                ?: error("Sudoku core AAR missing reverse forwarder API; rebuild app/libs/sudoku.aar")
+            try {
+                method.invoke(null, listenAddr, dialUrl, insecure)
+            } catch (e: java.lang.reflect.InvocationTargetException) {
+                throw e.targetException ?: e
+            }
+        }
+
+        fun stopReverseForwarder() {
+            try {
+                stopReverseForwarderMethod?.invoke(null)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to stop reverse forwarder", e)
+            }
+        }
+
+        fun getReverseForwardStatusJsonOrNull(): String? {
+            return try {
+                reverseStatusMethod?.invoke(null) as? String
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to get reverse forwarder status", e)
+                null
+            }
+        }
     }
 
     fun start(configJson: String) {
@@ -84,6 +119,28 @@ object GoCoreClient {
 
     fun resetTrafficStats() {
         MobileBinding.resetTrafficStats()
+    }
+
+    fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
+        try {
+            MobileBinding.startReverseForwarder(listenAddr.trim(), dialUrl.trim(), insecure)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to start reverse forwarder", t)
+            throw t
+        }
+    }
+
+    fun stopReverseForwarder() {
+        MobileBinding.stopReverseForwarder()
+    }
+
+    fun getReverseForwardStatus(): ReverseForwardStatus {
+        val raw = MobileBinding.getReverseForwardStatusJsonOrNull() ?: return ReverseForwardStatus()
+        return runCatching { json.decodeFromString<ReverseForwardStatus>(raw) }
+            .getOrElse {
+                Log.w(TAG, "Failed to decode reverse forwarder status: $raw", it)
+                ReverseForwardStatus()
+            }
     }
 
     fun buildConfigJson(node: NodeConfig): String {
@@ -171,5 +228,14 @@ object GoCoreClient {
         @SerialName("direct_rx") val directRx: Long = 0,
         @SerialName("proxy_tx") val proxyTx: Long = 0,
         @SerialName("proxy_rx") val proxyRx: Long = 0
+    )
+
+    @Serializable
+    data class ReverseForwardStatus(
+        val running: Boolean = false,
+        @SerialName("listen_addr") val listenAddr: String = "",
+        @SerialName("dial_url") val dialUrl: String = "",
+        val insecure: Boolean = false,
+        @SerialName("last_error") val lastError: String = ""
     )
 }

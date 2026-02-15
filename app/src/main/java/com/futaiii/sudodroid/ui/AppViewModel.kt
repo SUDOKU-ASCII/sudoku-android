@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
+import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.net.ServerAddressResolver
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.collections.immutable.ImmutableList
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class NodeUi(
@@ -31,6 +33,8 @@ data class AppState(
     val nodes: ImmutableList<NodeUi> = persistentListOf(),
     val activeId: String? = null,
     val isVpnRunning: Boolean = false,
+    val reverseForwardStatus: GoCoreClient.ReverseForwardStatus = GoCoreClient.ReverseForwardStatus(),
+    val reverseForwardBusy: Boolean = false,
     val error: String? = null
 )
 
@@ -40,6 +44,8 @@ class AppViewModel(
 ) : AndroidViewModel(application) {
     private val activeId = MutableStateFlow<String?>(null)
     private val latencyMap = MutableStateFlow<Map<String, Long?>>(emptyMap())
+    private val reverseForwardStatus = MutableStateFlow(GoCoreClient.ReverseForwardStatus())
+    private val reverseForwardBusy = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
 
     init {
@@ -68,14 +74,23 @@ class AppViewModel(
                 }
             }
         }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
+                delay(1_000)
+            }
+        }
     }
 
     private val baseState = combine(
         repo.nodes,
         activeId,
         latencyMap,
+        reverseForwardStatus,
+        reverseForwardBusy,
         error
-    ) { nodes, active, latency, err ->
+    ) { nodes, active, latency, reverseStatus, reverseBusy, err ->
         AppState(
             nodes = nodes.map {
                 NodeUi(
@@ -85,6 +100,8 @@ class AppViewModel(
                 )
             }.toImmutableList(),
             activeId = active,
+            reverseForwardStatus = reverseStatus,
+            reverseForwardBusy = reverseBusy,
             error = err
         )
     }
@@ -146,6 +163,33 @@ class AppViewModel(
                 kotlin.math.abs((System.nanoTime() - start) / 1_000_000L)
             }.getOrNull()
             latencyMap.value = latencyMap.value.toMutableMap().apply { put(node.id, latency) }
+        }
+    }
+
+    fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
+        if (state.value.isVpnRunning) {
+            error.value = "Please stop VPN before starting local forwarder"
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            reverseForwardBusy.value = true
+            runCatching {
+                GoCoreClient.startReverseForwarder(listenAddr, dialUrl, insecure)
+            }.onFailure {
+                error.value = it.message ?: "Failed to start local forwarder"
+            }
+            reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
+            reverseForwardBusy.value = false
+        }
+    }
+
+    fun stopReverseForwarder() {
+        viewModelScope.launch(Dispatchers.IO) {
+            reverseForwardBusy.value = true
+            runCatching { GoCoreClient.stopReverseForwarder() }
+                .onFailure { error.value = it.message ?: "Failed to stop local forwarder" }
+            reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
+            reverseForwardBusy.value = false
         }
     }
 

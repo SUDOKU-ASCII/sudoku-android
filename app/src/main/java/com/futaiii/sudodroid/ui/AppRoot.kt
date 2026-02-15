@@ -98,6 +98,7 @@ import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeInputValidator
 import com.futaiii.sudodroid.data.ProxyMode
+import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.launch
@@ -116,6 +117,9 @@ fun AppRoot(
     var showEditor by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<NodeConfig?>(null) }
     var pendingSwitch by remember { mutableStateOf<NodeConfig?>(null) }
+    var reverseDialUrl by rememberSaveable { mutableStateOf("wss://example.com:8081/ssh") }
+    var reverseListenAddr by rememberSaveable { mutableStateOf("127.0.0.1:2222") }
+    var reverseInsecure by rememberSaveable { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(state.error) {
@@ -123,6 +127,14 @@ fun AppRoot(
         if (err != null) {
             snackbarHostState.showSnackbar(err)
             viewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(state.reverseForwardStatus.running, state.reverseForwardStatus.dialUrl, state.reverseForwardStatus.listenAddr, state.reverseForwardStatus.insecure) {
+        if (state.reverseForwardStatus.running) {
+            reverseDialUrl = state.reverseForwardStatus.dialUrl
+            reverseListenAddr = state.reverseForwardStatus.listenAddr
+            reverseInsecure = state.reverseForwardStatus.insecure
         }
     }
 
@@ -199,37 +211,61 @@ fun AppRoot(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            if (state.nodes.isEmpty()) {
-                EmptyState(
-                    onAddNode = {
-                        editorInitial = null
-                        showEditor = true
-                    }
-                )
-            } else {
-                NodeList(
-                    nodes = state.nodes,
-                    onSelect = {
-                        if (state.isVpnRunning && state.activeId != it.id) {
-                            pendingSwitch = it
-                        } else {
-                            viewModel.selectNode(it.id)
+            ReverseForwarderCard(
+                isVpnRunning = state.isVpnRunning,
+                status = state.reverseForwardStatus,
+                isBusy = state.reverseForwardBusy,
+                dialUrl = reverseDialUrl,
+                listenAddr = reverseListenAddr,
+                insecure = reverseInsecure,
+                onDialUrlChange = { reverseDialUrl = it },
+                onListenAddrChange = { reverseListenAddr = it },
+                onInsecureChange = { reverseInsecure = it },
+                onStart = {
+                    viewModel.startReverseForwarder(
+                        listenAddr = reverseListenAddr,
+                        dialUrl = reverseDialUrl,
+                        insecure = reverseInsecure
+                    )
+                },
+                onStop = { viewModel.stopReverseForwarder() }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Box(modifier = Modifier.weight(1f)) {
+                if (state.nodes.isEmpty()) {
+                    EmptyState(
+                        onAddNode = {
+                            editorInitial = null
+                            showEditor = true
                         }
-                    },
-                    onPing = { viewModel.pingNode(it) },
-                    onEdit = {
-                        editorInitial = it
-                        showEditor = true
-                    },
-                    onDelete = { pendingDelete = it },
-                    onCopyLink = {
-                        val link = ShortLinkCodec.toLink(it)
-                        clipboard.setText(AnnotatedString(link))
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Copied short link")
+                    )
+                } else {
+                    NodeList(
+                        nodes = state.nodes,
+                        onSelect = {
+                            if (state.isVpnRunning && state.activeId != it.id) {
+                                pendingSwitch = it
+                            } else {
+                                viewModel.selectNode(it.id)
+                            }
+                        },
+                        onPing = { viewModel.pingNode(it) },
+                        onEdit = {
+                            editorInitial = it
+                            showEditor = true
+                        },
+                        onDelete = { pendingDelete = it },
+                        onCopyLink = {
+                            val link = ShortLinkCodec.toLink(it)
+                            clipboard.setText(AnnotatedString(link))
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Copied short link")
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -284,6 +320,144 @@ private fun SudodroidTopBar(
             containerColor = MaterialTheme.colorScheme.surface
         )
     )
+}
+
+@Composable
+private fun ReverseForwarderCard(
+    isVpnRunning: Boolean,
+    status: GoCoreClient.ReverseForwardStatus,
+    isBusy: Boolean,
+    dialUrl: String,
+    listenAddr: String,
+    insecure: Boolean,
+    onDialUrlChange: (String) -> Unit,
+    onListenAddrChange: (String) -> Unit,
+    onInsecureChange: (Boolean) -> Unit,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.WifiTethering, contentDescription = null)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Local Port Forwarder",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Run reverse TCP-over-WebSocket without starting VPN",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                AssistChip(
+                    onClick = {},
+                    enabled = false,
+                    label = { Text(if (status.running) "Running" else "Stopped") }
+                )
+            }
+
+            OutlinedTextField(
+                value = dialUrl,
+                onValueChange = onDialUrlChange,
+                label = { Text("rev-dial (ws:// or wss://)") },
+                singleLine = true,
+                enabled = !status.running && !isBusy,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = listenAddr,
+                onValueChange = onListenAddrChange,
+                label = { Text("rev-listen (e.g. 127.0.0.1:2222)") },
+                singleLine = true,
+                enabled = !status.running && !isBusy,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Switch(
+                    checked = insecure,
+                    onCheckedChange = onInsecureChange,
+                    enabled = !status.running && !isBusy
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Allow insecure TLS")
+                    Text(
+                        "Only for self-signed wss endpoints",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            val commandPreview = "./sudoku -rev-dial $dialUrl -rev-listen $listenAddr"
+            Text(
+                text = commandPreview,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (isVpnRunning) {
+                Text(
+                    text = "Stop VPN first before starting local forwarder.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            if (status.lastError.isNotBlank()) {
+                Text(
+                    text = "Last error: ${status.lastError}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (status.running) {
+                    FilledTonalButton(
+                        onClick = onStop,
+                        enabled = !isBusy,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isBusy) "Stopping..." else "Stop")
+                    }
+                } else {
+                    FilledTonalButton(
+                        onClick = onStart,
+                        enabled = !isBusy && !isVpnRunning && dialUrl.isNotBlank() && listenAddr.isNotBlank()
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isBusy) "Starting..." else "Start Forwarder")
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

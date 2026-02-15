@@ -308,23 +308,209 @@ PY
 # Inject Mobile Wrapper Package
 echo "Injecting mobile wrapper..."
 mkdir -p "${SUDOKU_DIR}/pkg/mobile"
-cat <<EOF > "${SUDOKU_DIR}/pkg/mobile/mobile.go"
+cat <<'EOF' > "${SUDOKU_DIR}/pkg/mobile/mobile.go"
 package mobile
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sync"
+	"log"
+	"net"
+	"net/http"
+	"net/url"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/coder/websocket"
 	"github.com/saba-futai/sudoku/internal/app"
 	"github.com/saba-futai/sudoku/internal/config"
+	"github.com/saba-futai/sudoku/internal/tunnel"
 )
 
+const sudokuTCPSubprotocol = "sudoku-tcp-v1"
+
+type reverseForwardStatus struct {
+	Running    bool   `json:"running"`
+	ListenAddr string `json:"listen_addr"`
+	DialURL    string `json:"dial_url"`
+	Insecure   bool   `json:"insecure"`
+	LastError  string `json:"last_error"`
+}
+
+type reverseForwardInstance struct {
+	ln         net.Listener
+	done       chan struct{}
+	listenAddr string
+	dialURL    string
+	insecure   bool
+}
+
 var (
-	mu       sync.Mutex
-	instance *app.MobileInstance
+	mu              sync.Mutex
+	instance        *app.MobileInstance
+	reverseInstance *reverseForwardInstance
+	reverseStatus   reverseForwardStatus
 )
+
+func stopReverseForwarderLocked() {
+	if reverseInstance == nil {
+		reverseStatus.Running = false
+		return
+	}
+
+	ln := reverseInstance.ln
+	done := reverseInstance.done
+	reverseInstance = nil
+
+	if ln != nil {
+		_ = ln.Close()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(1500 * time.Millisecond):
+			log.Printf("[Mobile][Reverse] timeout while stopping forwarder")
+		}
+	}
+	reverseStatus.Running = false
+}
+
+func startReverseForwarderLocked(listenAddr, dialURL string, insecure bool) error {
+	listenAddr = strings.TrimSpace(listenAddr)
+	dialURL = strings.TrimSpace(dialURL)
+	if listenAddr == "" {
+		return fmt.Errorf("missing listen address")
+	}
+	if dialURL == "" {
+		return fmt.Errorf("missing dial url")
+	}
+
+	u, err := url.Parse(dialURL)
+	if err != nil || u == nil {
+		return fmt.Errorf("invalid dial url: %q", dialURL)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "ws", "wss":
+	default:
+		return fmt.Errorf("dial url must be ws:// or wss:// (got %q)", u.Scheme)
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return fmt.Errorf("dial url missing host: %q", dialURL)
+	}
+
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return err
+	}
+
+	inst := &reverseForwardInstance{
+		ln:         ln,
+		done:       make(chan struct{}),
+		listenAddr: listenAddr,
+		dialURL:    dialURL,
+		insecure:   insecure,
+	}
+	reverseInstance = inst
+	reverseStatus = reverseForwardStatus{
+		Running:    true,
+		ListenAddr: listenAddr,
+		DialURL:    dialURL,
+		Insecure:   insecure,
+		LastError:  "",
+	}
+
+	var wsHTTPClient *http.Client
+	if insecure && strings.EqualFold(u.Scheme, "wss") {
+		wsHTTPClient = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		}
+	}
+
+	go func(localInst *reverseForwardInstance) {
+		defer close(localInst.done)
+		for {
+			c, err := localInst.ln.Accept()
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+				mu.Lock()
+				reverseStatus.LastError = err.Error()
+				mu.Unlock()
+				continue
+			}
+
+			go func(local net.Conn) {
+				if local == nil {
+					return
+				}
+				defer local.Close()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ws, _, err := websocket.Dial(ctx, localInst.dialURL, &websocket.DialOptions{
+					Subprotocols:    []string{sudokuTCPSubprotocol},
+					CompressionMode: websocket.CompressionDisabled,
+					HTTPClient:      wsHTTPClient,
+				})
+				cancel()
+				if err != nil {
+					mu.Lock()
+					reverseStatus.LastError = err.Error()
+					mu.Unlock()
+					return
+				}
+				if ws.Subprotocol() != sudokuTCPSubprotocol {
+					_ = ws.Close(websocket.StatusPolicyViolation, "subprotocol required")
+					mu.Lock()
+					reverseStatus.LastError = "server did not accept sudoku-tcp-v1"
+					mu.Unlock()
+					return
+				}
+
+				wsConn := websocket.NetConn(context.Background(), ws, websocket.MessageBinary)
+				tunnel.PipeConn(local, wsConn)
+			}(c)
+		}
+	}(inst)
+
+	return nil
+}
+
+func StartReverseForwarder(listenAddr, dialURL string, insecure bool) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if instance != nil {
+		instance.Stop()
+		instance = nil
+	}
+	stopReverseForwarderLocked()
+	app.ResetTrafficStats()
+	return startReverseForwarderLocked(listenAddr, dialURL, insecure)
+}
+
+func StopReverseForwarder() {
+	mu.Lock()
+	defer mu.Unlock()
+	stopReverseForwarderLocked()
+}
+
+func GetReverseForwardStatusJson() string {
+	mu.Lock()
+	status := reverseStatus
+	mu.Unlock()
+	b, err := json.Marshal(status)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
 
 func Start(jsonConfig string) error {
 	mu.Lock()
@@ -334,6 +520,7 @@ func Start(jsonConfig string) error {
 		instance.Stop()
 		instance = nil
 	}
+	stopReverseForwarderLocked()
 	app.ResetTrafficStats()
 
 	var cfg config.Config
@@ -380,6 +567,7 @@ func Stop() {
 		instance.Stop()
 		instance = nil
 	}
+	stopReverseForwarderLocked()
 	app.ResetTrafficStats()
 }
 EOF

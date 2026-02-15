@@ -7,6 +7,7 @@
 Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
 - Full node editor with validation, proxy modes (Global/Direct/PAC), padding tweaks, and a toggle for packed (bandwidth-optimized) downlink.
+- Reverse TCP-over-WebSocket local forwarder UI (no VPN needed), equivalent to `./sudoku -rev-dial ... -rev-listen ...` for local SSH/RDP style hops.
 - Quick Settings tile to start/stop the VPN, plus notification traffic stats split by DIRECT vs PROXY.
 - Import/export `sudoku://` short links, copy them straight into the clipboard, and rename nodes inline.
 - Foreground VPN service that starts the Go core, binds a local mixed proxy, and bridges the device TUN interface through `hev-socks5-tunnel`.
