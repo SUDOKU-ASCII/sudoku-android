@@ -210,30 +210,35 @@ fun AppRoot(
                 isVpnRunning = state.isVpnRunning,
                 isProxyOnlyRunning = state.isProxyOnlyRunning,
                 activeNode = activeNode,
-                onToggleVpn = { onToggleVpn(state.isVpnRunning) },
                 onLongPressTitle = {
-                    when {
-                        state.isVpnRunning -> {
-                            onToggleVpn(true)
-                            scope.launch {
-                                delay(700)
-                                onToggleProxyOnly(false)
-                                snackbarHostState.showSnackbar("Switching to proxy-only mode...")
-                            }
+                    if (activeNode == null) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Please add/select a node first")
                         }
+                    } else {
+                        when {
+                            state.isVpnRunning -> {
+                                onToggleVpn(true)
+                                scope.launch {
+                                    delay(700)
+                                    onToggleProxyOnly(false)
+                                    snackbarHostState.showSnackbar("Switching to proxy-only mode...")
+                                }
+                            }
 
-                        state.isProxyOnlyRunning -> {
-                            onToggleProxyOnly(true)
-                            scope.launch {
-                                delay(700)
+                            state.isProxyOnlyRunning -> {
+                                onToggleProxyOnly(true)
+                                scope.launch {
+                                    delay(700)
+                                    onToggleVpn(false)
+                                    snackbarHostState.showSnackbar("Switching to VPN mode...")
+                                }
+                            }
+
+                            else -> {
                                 onToggleVpn(false)
-                                snackbarHostState.showSnackbar("Switching to VPN mode...")
+                                scope.launch { snackbarHostState.showSnackbar("VPN mode started") }
                             }
-                        }
-
-                        else -> {
-                            onToggleProxyOnly(false)
-                            scope.launch { snackbarHostState.showSnackbar("Proxy-only mode started") }
                         }
                     }
                 }
@@ -376,7 +381,6 @@ private fun SudodroidTopBar(
     isVpnRunning: Boolean,
     isProxyOnlyRunning: Boolean,
     activeNode: NodeConfig?,
-    onToggleVpn: () -> Unit,
     onLongPressTitle: () -> Unit
 ) {
     LargeTopAppBar(
@@ -407,27 +411,6 @@ private fun SudodroidTopBar(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        },
-        actions = {
-            FilledTonalButton(
-                onClick = onToggleVpn,
-                enabled = activeNode != null && !isProxyOnlyRunning,
-                colors = if (isVpnRunning) {
-                    ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                } else {
-                    ButtonDefaults.filledTonalButtonColors()
-                }
-            ) {
-                Icon(
-                    if (isVpnRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(if (isVpnRunning) "Stop VPN" else "Start VPN")
             }
         },
         colors = TopAppBarDefaults.largeTopAppBarColors(
