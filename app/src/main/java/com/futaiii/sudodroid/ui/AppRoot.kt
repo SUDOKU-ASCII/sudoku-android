@@ -232,7 +232,7 @@ fun AppRoot(
         gesturesEnabled = true,
         drawerContent = {
             ModalDrawerSheet(
-                modifier = Modifier.fillMaxWidth(0.92f),
+                modifier = Modifier.width(300.dp),
                 drawerShape = RoundedCornerShape(0.dp),
                 drawerTonalElevation = 0.dp
             ) {
