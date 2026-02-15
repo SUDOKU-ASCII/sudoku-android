@@ -140,7 +140,7 @@ fun AppRoot(
     var reverseDialUrl by rememberSaveable { mutableStateOf("wss://example.com:8081/ssh") }
     var reverseListenAddr by rememberSaveable { mutableStateOf("127.0.0.1:2222") }
     var reverseInsecure by rememberSaveable { mutableStateOf(false) }
-    var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.GLOBAL) }
+    var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.PAC) }
     var globalIpMode by rememberSaveable { mutableStateOf(IpMode.DEFAULT) }
     var globalRuleUrlsText by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current

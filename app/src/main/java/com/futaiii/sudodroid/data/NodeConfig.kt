@@ -18,7 +18,7 @@ val DEFAULT_PAC_RULE_URLS: List<String> = listOf(
 @Serializable
 data class GlobalProxySettings(
     @SerialName("proxy_mode")
-    val proxyMode: ProxyMode = ProxyMode.GLOBAL,
+    val proxyMode: ProxyMode = ProxyMode.PAC,
     @SerialName("rule_urls")
     val ruleUrls: List<String> = DEFAULT_PAC_RULE_URLS,
     @SerialName("ip_mode")
@@ -44,7 +44,7 @@ data class NodeConfig(
     val paddingMin: Int = 5,
     val paddingMax: Int = 15,
     val localPort: Int = 1080,
-    val proxyMode: ProxyMode = ProxyMode.GLOBAL,
+    val proxyMode: ProxyMode = ProxyMode.PAC,
     val ruleUrls: List<String> = emptyList(),
     @SerialName("ip_mode")
     val ipMode: IpMode = IpMode.DEFAULT,
