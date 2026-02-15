@@ -2,6 +2,7 @@
 
 package com.futaiii.sudodroid.ui
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +88,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -103,6 +105,7 @@ import com.futaiii.sudodroid.data.ProxyMode
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -207,7 +210,33 @@ fun AppRoot(
                 isVpnRunning = state.isVpnRunning,
                 isProxyOnlyRunning = state.isProxyOnlyRunning,
                 activeNode = activeNode,
-                onToggleVpn = { onToggleVpn(state.isVpnRunning) }
+                onToggleVpn = { onToggleVpn(state.isVpnRunning) },
+                onLongPressTitle = {
+                    when {
+                        state.isVpnRunning -> {
+                            onToggleVpn(true)
+                            scope.launch {
+                                delay(700)
+                                onToggleProxyOnly(false)
+                                snackbarHostState.showSnackbar("Switching to proxy-only mode...")
+                            }
+                        }
+
+                        state.isProxyOnlyRunning -> {
+                            onToggleProxyOnly(true)
+                            scope.launch {
+                                delay(700)
+                                onToggleVpn(false)
+                                snackbarHostState.showSnackbar("Switching to VPN mode...")
+                            }
+                        }
+
+                        else -> {
+                            onToggleProxyOnly(false)
+                            scope.launch { snackbarHostState.showSnackbar("Proxy-only mode started") }
+                        }
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -245,15 +274,6 @@ fun AppRoot(
                         snackbarHostState.showSnackbar("Global network settings saved")
                     }
                 }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            ProxyOnlyCard(
-                activeNode = activeNode,
-                isVpnRunning = state.isVpnRunning,
-                isProxyOnlyRunning = state.isProxyOnlyRunning,
-                onToggleProxyOnly = { onToggleProxyOnly(state.isProxyOnlyRunning) }
             )
 
             Spacer(Modifier.height(12.dp))
@@ -351,11 +371,16 @@ private fun SudodroidTopBar(
     isVpnRunning: Boolean,
     isProxyOnlyRunning: Boolean,
     activeNode: NodeConfig?,
-    onToggleVpn: () -> Unit
+    onToggleVpn: () -> Unit,
+    onLongPressTitle: () -> Unit
 ) {
     LargeTopAppBar(
         title = {
-            Column {
+            Column(
+                modifier = Modifier.pointerInput(isVpnRunning, isProxyOnlyRunning) {
+                    detectTapGestures(onLongPress = { onLongPressTitle() })
+                }
+            ) {
                 Text("Sudodroid", style = MaterialTheme.typography.headlineSmall)
                 val subtitle = when {
                     isVpnRunning && activeNode != null -> "VPN connected to ${activeNode.name.ifBlank { activeNode.host }}"
@@ -369,6 +394,11 @@ private fun SudodroidTopBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Long press Sudodroid title to switch VPN / Proxy-only",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -469,87 +499,6 @@ private fun GlobalSettingsCard(
                     Icon(Icons.Outlined.Tune, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Save Global Settings")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProxyOnlyCard(
-    activeNode: NodeConfig?,
-    isVpnRunning: Boolean,
-    isProxyOnlyRunning: Boolean,
-    onToggleProxyOnly: () -> Unit
-) {
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.NetworkCheck, contentDescription = null)
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Proxy-only Mode",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Start Sudoku core without VPN and expose local SOCKS/mixed proxy only.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                AssistChip(
-                    onClick = {},
-                    enabled = false,
-                    label = { Text(if (isProxyOnlyRunning) "Running" else "Stopped") }
-                )
-            }
-
-            val nodeName = activeNode?.name?.ifBlank { activeNode.host }
-            Text(
-                text = if (nodeName != null) "Current node: $nodeName" else "No node selected",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            if (isVpnRunning) {
-                Text(
-                    text = "Stop VPN first before starting proxy-only mode.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                FilledTonalButton(
-                    onClick = onToggleProxyOnly,
-                    enabled = activeNode != null && (!isVpnRunning || isProxyOnlyRunning),
-                    colors = if (isProxyOnlyRunning) {
-                        ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    } else {
-                        ButtonDefaults.filledTonalButtonColors()
-                    }
-                ) {
-                    Icon(
-                        if (isProxyOnlyRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                        contentDescription = null
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (isProxyOnlyRunning) "Stop Proxy-only" else "Start Proxy-only")
                 }
             }
         }
