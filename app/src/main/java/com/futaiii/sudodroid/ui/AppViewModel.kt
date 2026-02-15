@@ -90,26 +90,29 @@ class AppViewModel(
     }
 
     private val baseState = combine(
-        repo.nodes,
-        repo.globalProxySettings,
-        activeId,
-        latencyMap,
-        reverseForwardStatus,
+        combine(
+            repo.nodes,
+            repo.globalProxySettings,
+            activeId,
+            latencyMap,
+            reverseForwardStatus
+        ) { nodes, globalSettings, active, latency, reverseStatus ->
+            AppState(
+                nodes = nodes.map {
+                    NodeUi(
+                        node = it,
+                        latencyMs = latency[it.id],
+                        isActive = it.id == active
+                    )
+                }.toImmutableList(),
+                activeId = active,
+                globalProxySettings = globalSettings,
+                reverseForwardStatus = reverseStatus
+            )
+        },
         reverseForwardBusy
-    ) { nodes, globalSettings, active, latency, reverseStatus, reverseBusy ->
-        AppState(
-            nodes = nodes.map {
-                NodeUi(
-                    node = it,
-                    latencyMs = latency[it.id],
-                    isActive = it.id == active
-                )
-            }.toImmutableList(),
-            activeId = active,
-            globalProxySettings = globalSettings,
-            reverseForwardStatus = reverseStatus,
-            reverseForwardBusy = reverseBusy
-        )
+    ) { partial, reverseBusy ->
+        partial.copy(reverseForwardBusy = reverseBusy)
     }
 
     val state: StateFlow<AppState> = combine(
