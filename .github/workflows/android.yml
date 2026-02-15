@@ -153,9 +153,39 @@ jobs:
           fi
 
       - name: Build APK
+        id: build_apk
+        continue-on-error: true
         env:
           ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-        run: ./gradlew :app:assembleRelease
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee /tmp/build-apk.log
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build APK log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-apk-log
+          path: /tmp/build-apk.log
+          if-no-files-found: ignore
+
+      - name: Fail fast with build summary
+        if: steps.build_apk.outputs.exit_code != '0'
+        run: |
+          set -euo pipefail
+          err_line="$(grep -E "e: file:|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/build-apk.log | head -n 1 || true)"
+          if [ -z "$err_line" ]; then
+            err_line="$(tail -n 1 /tmp/build-apk.log)"
+          fi
+          echo "::error title=Build APK failed::$err_line"
+          {
+            echo "### Build APK failure (tail 120 lines)"
+            echo '```'
+            tail -n 120 /tmp/build-apk.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Collect APKs
         run: |
