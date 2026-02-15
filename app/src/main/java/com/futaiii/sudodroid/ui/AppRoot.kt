@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -255,37 +258,41 @@ fun AppRoot(
 
             Spacer(Modifier.height(12.dp))
 
-            ReverseForwarderCard(
-                isVpnRunning = state.isVpnRunning,
-                isProxyOnlyRunning = state.isProxyOnlyRunning,
-                status = state.reverseForwardStatus,
-                isBusy = state.reverseForwardBusy,
-                dialUrl = reverseDialUrl,
-                listenAddr = reverseListenAddr,
-                insecure = reverseInsecure,
-                onDialUrlChange = { reverseDialUrl = it },
-                onListenAddrChange = { reverseListenAddr = it },
-                onInsecureChange = { reverseInsecure = it },
-                onStart = {
-                    viewModel.startReverseForwarder(
-                        listenAddr = reverseListenAddr,
-                        dialUrl = reverseDialUrl,
-                        insecure = reverseInsecure
-                    )
-                },
-                onStop = { viewModel.stopReverseForwarder() }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
             Box(modifier = Modifier.weight(1f)) {
                 if (state.nodes.isEmpty()) {
-                    EmptyState(
-                        onAddNode = {
-                            editorInitial = null
-                            showEditor = true
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            EmptyState(
+                                onAddNode = {
+                                    editorInitial = null
+                                    showEditor = true
+                                }
+                            )
                         }
-                    )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        ReverseForwarderCard(
+                            isVpnRunning = state.isVpnRunning,
+                            isProxyOnlyRunning = state.isProxyOnlyRunning,
+                            status = state.reverseForwardStatus,
+                            isBusy = state.reverseForwardBusy,
+                            dialUrl = reverseDialUrl,
+                            listenAddr = reverseListenAddr,
+                            insecure = reverseInsecure,
+                            onDialUrlChange = { reverseDialUrl = it },
+                            onListenAddrChange = { reverseListenAddr = it },
+                            onInsecureChange = { reverseInsecure = it },
+                            onStart = {
+                                viewModel.startReverseForwarder(
+                                    listenAddr = reverseListenAddr,
+                                    dialUrl = reverseDialUrl,
+                                    insecure = reverseInsecure
+                                )
+                            },
+                            onStop = { viewModel.stopReverseForwarder() }
+                        )
+                    }
                 } else {
                     NodeList(
                         nodes = state.nodes,
@@ -309,6 +316,28 @@ fun AppRoot(
                             scope.launch {
                                 snackbarHostState.showSnackbar("Copied short link")
                             }
+                        },
+                        footer = {
+                            ReverseForwarderCard(
+                                isVpnRunning = state.isVpnRunning,
+                                isProxyOnlyRunning = state.isProxyOnlyRunning,
+                                status = state.reverseForwardStatus,
+                                isBusy = state.reverseForwardBusy,
+                                dialUrl = reverseDialUrl,
+                                listenAddr = reverseListenAddr,
+                                insecure = reverseInsecure,
+                                onDialUrlChange = { reverseDialUrl = it },
+                                onListenAddrChange = { reverseListenAddr = it },
+                                onInsecureChange = { reverseInsecure = it },
+                                onStart = {
+                                    viewModel.startReverseForwarder(
+                                        listenAddr = reverseListenAddr,
+                                        dialUrl = reverseDialUrl,
+                                        insecure = reverseInsecure
+                                    )
+                                },
+                                onStop = { viewModel.stopReverseForwarder() }
+                            )
                         }
                     )
                 }
@@ -709,10 +738,13 @@ private fun NodeList(
     onPing: (NodeConfig) -> Unit,
     onEdit: (NodeConfig) -> Unit,
     onDelete: (NodeConfig) -> Unit,
-    onCopyLink: (NodeConfig) -> Unit
+    onCopyLink: (NodeConfig) -> Unit,
+    footer: (@Composable () -> Unit)? = null
 ) {
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 96.dp, top = 16.dp)
     ) {
@@ -726,6 +758,12 @@ private fun NodeList(
                 onDelete = { onDelete(nodeUi.node) },
                 onCopyLink = { onCopyLink(nodeUi.node) }
             )
+        }
+
+        if (footer != null) {
+            item(span = { GridItemSpan(2) }) {
+                footer()
+            }
         }
     }
 }
