@@ -229,10 +229,11 @@ fun AppRoot(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = true,
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             ModalDrawerSheet(
-                modifier = Modifier.fillMaxWidth(0.92f)
+                modifier = Modifier.fillMaxWidth(0.92f),
+                drawerShape = RoundedCornerShape(0.dp)
             ) {
                 Column(
                     modifier = Modifier
