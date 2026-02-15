@@ -1,7 +1,6 @@
 package com.futaiii.sudodroid.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -18,11 +17,19 @@ class NodeRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val keyNodes = stringPreferencesKey("nodes_json")
     private val keyActiveId = stringPreferencesKey("active_node_id")
+    private val keyGlobalProxySettings = stringPreferencesKey("global_proxy_settings_json")
 
     val nodes: Flow<List<NodeConfig>> = context.nodeDataStore.data.map { prefs ->
         prefs[keyNodes]?.let { stored ->
             runCatching { json.decodeFromString<List<NodeConfig>>(stored) }.getOrElse { emptyList() }
         } ?: emptyList()
+    }
+
+    val globalProxySettings: Flow<GlobalProxySettings> = context.nodeDataStore.data.map { prefs ->
+        prefs[keyGlobalProxySettings]?.let { stored ->
+            runCatching { json.decodeFromString<GlobalProxySettings>(stored) }
+                .getOrNull()
+        } ?: GlobalProxySettings()
     }
 
     val lastActiveId: Flow<String?> = context.nodeDataStore.data.map { prefs ->
@@ -49,6 +56,12 @@ class NodeRepository(private val context: Context) {
             }
         }
         persist(updated)
+    }
+
+    suspend fun saveGlobalProxySettings(settings: GlobalProxySettings) {
+        context.nodeDataStore.edit { prefs ->
+            prefs[keyGlobalProxySettings] = json.encodeToString(settings)
+        }
     }
 
     suspend fun delete(id: String) {

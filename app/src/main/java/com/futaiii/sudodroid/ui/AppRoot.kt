@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -69,7 +68,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +90,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
+import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.IpMode
@@ -108,7 +107,9 @@ import java.util.UUID
 fun AppRoot(
     viewModel: AppViewModel,
     onToggleVpn: (Boolean) -> Unit,
-    onSwitchNodeWhileRunning: (NodeConfig) -> Unit
+    onSwitchNodeWhileRunning: (NodeConfig) -> Unit,
+    onToggleProxyOnly: (Boolean) -> Unit,
+    onSwitchNodeWhileProxyOnlyRunning: (NodeConfig) -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -120,6 +121,9 @@ fun AppRoot(
     var reverseDialUrl by rememberSaveable { mutableStateOf("wss://example.com:8081/ssh") }
     var reverseListenAddr by rememberSaveable { mutableStateOf("127.0.0.1:2222") }
     var reverseInsecure by rememberSaveable { mutableStateOf(false) }
+    var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.GLOBAL) }
+    var globalIpMode by rememberSaveable { mutableStateOf(IpMode.DEFAULT) }
+    var globalRuleUrlsText by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(state.error) {
@@ -136,6 +140,12 @@ fun AppRoot(
             reverseListenAddr = state.reverseForwardStatus.listenAddr
             reverseInsecure = state.reverseForwardStatus.insecure
         }
+    }
+
+    LaunchedEffect(state.globalProxySettings) {
+        globalProxyMode = state.globalProxySettings.proxyMode
+        globalIpMode = state.globalProxySettings.ipMode
+        globalRuleUrlsText = state.globalProxySettings.ruleUrls.joinToString("\n")
     }
 
     if (showEditor) {
@@ -178,7 +188,10 @@ fun AppRoot(
             onDismiss = { pendingSwitch = null },
             onConfirm = {
                 viewModel.selectNode(node.id)
-                onSwitchNodeWhileRunning(node)
+                when {
+                    state.isVpnRunning -> onSwitchNodeWhileRunning(node)
+                    state.isProxyOnlyRunning -> onSwitchNodeWhileProxyOnlyRunning(node)
+                }
                 pendingSwitch = null
             }
         )
@@ -188,9 +201,10 @@ fun AppRoot(
         modifier = Modifier.statusBarsPadding(),
         topBar = {
             SudodroidTopBar(
-                isRunning = state.isVpnRunning,
+                isVpnRunning = state.isVpnRunning,
+                isProxyOnlyRunning = state.isProxyOnlyRunning,
                 activeNode = activeNode,
-                onToggle = { onToggleVpn(state.isVpnRunning) }
+                onToggleVpn = { onToggleVpn(state.isVpnRunning) }
             )
         },
         floatingActionButton = {
@@ -211,8 +225,39 @@ fun AppRoot(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
+            GlobalSettingsCard(
+                proxyMode = globalProxyMode,
+                ipMode = globalIpMode,
+                ruleUrls = globalRuleUrlsText,
+                onProxyModeChange = { globalProxyMode = it },
+                onIpModeChange = { globalIpMode = it },
+                onRuleUrlsChange = { globalRuleUrlsText = it },
+                onSave = {
+                    viewModel.updateGlobalProxySettings(
+                        proxyMode = globalProxyMode,
+                        ipMode = globalIpMode,
+                        ruleUrlsText = globalRuleUrlsText
+                    )
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Global network settings saved")
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            ProxyOnlyCard(
+                activeNode = activeNode,
+                isVpnRunning = state.isVpnRunning,
+                isProxyOnlyRunning = state.isProxyOnlyRunning,
+                onToggleProxyOnly = { onToggleProxyOnly(state.isProxyOnlyRunning) }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
             ReverseForwarderCard(
                 isVpnRunning = state.isVpnRunning,
+                isProxyOnlyRunning = state.isProxyOnlyRunning,
                 status = state.reverseForwardStatus,
                 isBusy = state.reverseForwardBusy,
                 dialUrl = reverseDialUrl,
@@ -244,8 +289,9 @@ fun AppRoot(
                 } else {
                     NodeList(
                         nodes = state.nodes,
+                        globalProxySettings = state.globalProxySettings,
                         onSelect = {
-                            if (state.isVpnRunning && state.activeId != it.id) {
+                            if ((state.isVpnRunning || state.isProxyOnlyRunning) && state.activeId != it.id) {
                                 pendingSwitch = it
                             } else {
                                 viewModel.selectNode(it.id)
@@ -273,16 +319,18 @@ fun AppRoot(
 
 @Composable
 private fun SudodroidTopBar(
-    isRunning: Boolean,
+    isVpnRunning: Boolean,
+    isProxyOnlyRunning: Boolean,
     activeNode: NodeConfig?,
-    onToggle: () -> Unit
+    onToggleVpn: () -> Unit
 ) {
     LargeTopAppBar(
         title = {
             Column {
                 Text("Sudodroid", style = MaterialTheme.typography.headlineSmall)
                 val subtitle = when {
-                    isRunning && activeNode != null -> "Connected to ${activeNode.name.ifBlank { activeNode.host }}"
+                    isVpnRunning && activeNode != null -> "VPN connected to ${activeNode.name.ifBlank { activeNode.host }}"
+                    isProxyOnlyRunning && activeNode != null -> "Proxy-only on ${activeNode.name.ifBlank { activeNode.host }}"
                     activeNode != null -> "Ready on ${activeNode.name.ifBlank { activeNode.host }}"
                     else -> "Add a node to get started"
                 }
@@ -297,9 +345,9 @@ private fun SudodroidTopBar(
         },
         actions = {
             FilledTonalButton(
-                onClick = onToggle,
-                enabled = activeNode != null,
-                colors = if (isRunning) {
+                onClick = onToggleVpn,
+                enabled = activeNode != null && !isProxyOnlyRunning,
+                colors = if (isVpnRunning) {
                     ButtonDefaults.filledTonalButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -309,11 +357,11 @@ private fun SudodroidTopBar(
                 }
             ) {
                 Icon(
-                    if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    if (isVpnRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
                     contentDescription = null
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(if (isRunning) "Stop VPN" else "Start VPN")
+                Text(if (isVpnRunning) "Stop VPN" else "Start VPN")
             }
         },
         colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -323,8 +371,166 @@ private fun SudodroidTopBar(
 }
 
 @Composable
+private fun GlobalSettingsCard(
+    proxyMode: ProxyMode,
+    ipMode: IpMode,
+    ruleUrls: String,
+    onProxyModeChange: (ProxyMode) -> Unit,
+    onIpModeChange: (IpMode) -> Unit,
+    onRuleUrlsChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Global Network Settings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "DNS preference and PAC routing are now shared by all nodes.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Text("IP version preference", style = MaterialTheme.typography.labelMedium)
+            SingleChoiceSegmentedButtonRow {
+                IpMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = ipMode == mode,
+                        onClick = { onIpModeChange(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, IpMode.entries.size),
+                        label = { Text(mode.label) }
+                    )
+                }
+            }
+
+            Text("Routing mode", style = MaterialTheme.typography.labelMedium)
+            SingleChoiceSegmentedButtonRow {
+                ProxyMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = proxyMode == mode,
+                        onClick = { onProxyModeChange(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, ProxyMode.entries.size),
+                        label = { Text(mode.label) }
+                    )
+                }
+            }
+
+            if (proxyMode == ProxyMode.PAC) {
+                OutlinedTextField(
+                    value = ruleUrls,
+                    onValueChange = onRuleUrlsChange,
+                    label = { Text("Rule URLs (one per line)") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                FilledTonalButton(onClick = onSave) {
+                    Icon(Icons.Outlined.Tune, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Save Global Settings")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProxyOnlyCard(
+    activeNode: NodeConfig?,
+    isVpnRunning: Boolean,
+    isProxyOnlyRunning: Boolean,
+    onToggleProxyOnly: () -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.NetworkCheck, contentDescription = null)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Proxy-only Mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Start Sudoku core without VPN and expose local SOCKS/mixed proxy only.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                AssistChip(
+                    onClick = {},
+                    enabled = false,
+                    label = { Text(if (isProxyOnlyRunning) "Running" else "Stopped") }
+                )
+            }
+
+            val nodeName = activeNode?.name?.ifBlank { activeNode.host }
+            Text(
+                text = if (nodeName != null) "Current node: $nodeName" else "No node selected",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (isVpnRunning) {
+                Text(
+                    text = "Stop VPN first before starting proxy-only mode.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                FilledTonalButton(
+                    onClick = onToggleProxyOnly,
+                    enabled = activeNode != null && (!isVpnRunning || isProxyOnlyRunning),
+                    colors = if (isProxyOnlyRunning) {
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    } else {
+                        ButtonDefaults.filledTonalButtonColors()
+                    }
+                ) {
+                    Icon(
+                        if (isProxyOnlyRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isProxyOnlyRunning) "Stop Proxy-only" else "Start Proxy-only")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ReverseForwarderCard(
     isVpnRunning: Boolean,
+    isProxyOnlyRunning: Boolean,
     status: GoCoreClient.ReverseForwardStatus,
     isBusy: Boolean,
     dialUrl: String,
@@ -412,9 +618,9 @@ private fun ReverseForwarderCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            if (isVpnRunning) {
+            if (isVpnRunning || isProxyOnlyRunning) {
                 Text(
-                    text = "Stop VPN first before starting local forwarder.",
+                    text = "Stop VPN / proxy-only mode first before starting local forwarder.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -448,7 +654,7 @@ private fun ReverseForwarderCard(
                 } else {
                     FilledTonalButton(
                         onClick = onStart,
-                        enabled = !isBusy && !isVpnRunning && dialUrl.isNotBlank() && listenAddr.isNotBlank()
+                        enabled = !isBusy && !isVpnRunning && !isProxyOnlyRunning && dialUrl.isNotBlank() && listenAddr.isNotBlank()
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -498,6 +704,7 @@ private fun EmptyState(onAddNode: () -> Unit) {
 @Composable
 private fun NodeList(
     nodes: ImmutableList<NodeUi>,
+    globalProxySettings: GlobalProxySettings,
     onSelect: (NodeConfig) -> Unit,
     onPing: (NodeConfig) -> Unit,
     onEdit: (NodeConfig) -> Unit,
@@ -512,6 +719,7 @@ private fun NodeList(
         items(nodes, key = { it.node.id }) { nodeUi ->
             NodeCard(
                 nodeUi = nodeUi,
+                globalProxySettings = globalProxySettings,
                 onSelect = { onSelect(nodeUi.node) },
                 onPing = { onPing(nodeUi.node) },
                 onEdit = { onEdit(nodeUi.node) },
@@ -525,6 +733,7 @@ private fun NodeList(
 @Composable
 private fun NodeCard(
     nodeUi: NodeUi,
+    globalProxySettings: GlobalProxySettings,
     onSelect: () -> Unit,
     onPing: () -> Unit,
     onEdit: () -> Unit,
@@ -592,8 +801,8 @@ private fun NodeCard(
                 )
                 InfoChip(
                     icon = Icons.Outlined.NetworkCheck,
-                    label = when (nodeUi.node.proxyMode) {
-                        ProxyMode.PAC -> "PAC (${nodeUi.node.ruleUrls.size} rules)"
+                    label = when (globalProxySettings.proxyMode) {
+                        ProxyMode.PAC -> "PAC (${globalProxySettings.ruleUrls.size} rules)"
                         ProxyMode.GLOBAL -> "Global proxy"
                         ProxyMode.DIRECT -> "Bypass all"
                     }
@@ -670,9 +879,6 @@ private fun NodeEditorDialog(
         )
     }
     var aeadMode by rememberSaveable { mutableStateOf(initial?.aead ?: AeadMode.CHACHA20_POLY1305) }
-    var proxyMode by rememberSaveable { mutableStateOf(initial?.proxyMode ?: ProxyMode.GLOBAL) }
-    var ruleUrls by rememberSaveable { mutableStateOf(initial?.ruleUrls?.joinToString("\n") ?: "") }
-    var ipMode by rememberSaveable { mutableStateOf(initial?.ipMode ?: IpMode.DEFAULT) }
     var disableHttpMask by rememberSaveable { mutableStateOf(initial?.disableHttpMask ?: false) }
     var httpMaskMode by rememberSaveable { mutableStateOf(initial?.httpMaskMode ?: HttpMaskMode.LEGACY) }
     var httpMaskTls by rememberSaveable { mutableStateOf(initial?.httpMaskTls ?: false) }
@@ -874,20 +1080,7 @@ private fun NodeEditorDialog(
                         }
                     }
                     item {
-                        SectionCard(title = "Network") {
-                            Text("IP version preference", style = MaterialTheme.typography.labelMedium)
-                            SingleChoiceSegmentedButtonRow {
-                                IpMode.entries.forEachIndexed { index: Int, mode: IpMode ->
-                                    SegmentedButton(
-                                        selected = ipMode == mode,
-                                        onClick = { ipMode = mode },
-                                        shape = SegmentedButtonDefaults.itemShape(index, IpMode.entries.size),
-                                        modifier = Modifier.height(40.dp),
-                                        label = { Text(mode.label) }
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
+                        SectionCard(title = "HTTP Mask") {
                             val httpMaskEnabled = !disableHttpMask
                             LaunchedEffect(httpMaskEnabled, httpMaskMode) {
                                 if (!httpMaskEnabled || httpMaskMode == HttpMaskMode.LEGACY) {
@@ -982,32 +1175,6 @@ private fun NodeEditorDialog(
                         }
                     }
                     item {
-                        SectionCard(title = "Proxy mode") {
-                            Text("Routing", style = MaterialTheme.typography.labelMedium)
-                            val proxyOptions = ProxyMode.entries
-                            SingleChoiceSegmentedButtonRow {
-                                proxyOptions.forEachIndexed { index: Int, mode: ProxyMode ->
-                                    SegmentedButton(
-                                        selected = proxyMode == mode,
-                                        onClick = { proxyMode = mode },
-                                        shape = SegmentedButtonDefaults.itemShape(index, proxyOptions.size),
-                                        label = { Text(mode.label) }
-                                    )
-                                }
-                            }
-                            if (proxyMode == ProxyMode.PAC) {
-                                Spacer(Modifier.height(12.dp))
-                                OutlinedTextField(
-                                    value = ruleUrls,
-                                    onValueChange = { ruleUrls = it },
-                                    label = { Text("Rule URLs (one per line)") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    minLines = 3
-                                )
-                            }
-                        }
-                    }
-                    item {
                         SectionCard(title = "Downlink") {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1057,9 +1224,6 @@ private fun NodeEditorDialog(
                                     paddingMax = paddingMax,
                                     asciiMode = asciiMode,
                                     aeadMode = aeadMode,
-                                    proxyMode = proxyMode,
-                                    ruleUrls = ruleUrls,
-                                    ipMode = ipMode,
                                     disableHttpMask = disableHttpMask,
                                     httpMaskMode = httpMaskMode,
                                     httpMaskTls = httpMaskTls,
@@ -1095,9 +1259,6 @@ private fun buildNodeConfig(
     paddingMax: String,
     asciiMode: AsciiMode,
     aeadMode: AeadMode,
-    proxyMode: ProxyMode,
-    ruleUrls: String,
-    ipMode: IpMode,
     disableHttpMask: Boolean,
     httpMaskMode: HttpMaskMode,
     httpMaskTls: Boolean,
@@ -1118,9 +1279,6 @@ private fun buildNodeConfig(
     val sanitizedHost = host.trim().removeSurrounding("[", "]")
     if (sanitizedHost.isBlank()) throw IllegalArgumentException("Host cannot be blank")
     if (key.trim().isEmpty()) throw IllegalArgumentException("Key cannot be blank")
-    val sanitizedRuleUrls = ruleUrls.lines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
     val sanitizedHttpMaskHost = httpMaskHost.trim()
     val sanitizedHttpMaskPathRoot = NodeInputValidator.requireHttpMaskPathRoot(httpMaskPathRoot)
     val sanitizedHttpMaskMultiplex = if (disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
@@ -1144,9 +1302,6 @@ private fun buildNodeConfig(
         paddingMin = normalizedMin,
         paddingMax = normalizedMax,
         localPort = parsedLocalPort,
-        proxyMode = proxyMode,
-        ruleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList(),
-        ipMode = ipMode,
         disableHttpMask = disableHttpMask,
         httpMaskMode = httpMaskMode,
         httpMaskTls = httpMaskTls,

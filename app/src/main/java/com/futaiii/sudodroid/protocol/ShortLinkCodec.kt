@@ -2,6 +2,7 @@ package com.futaiii.sudodroid.protocol
 
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
+import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
@@ -15,10 +16,6 @@ import java.util.Base64
 
 object ShortLinkCodec {
     private val json = Json { ignoreUnknownKeys = true }
-    private val defaultRuleUrls = listOf(
-        "https://gh-proxy.org/https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/China/China.list",
-        "https://gh-proxy.org/https://raw.githubusercontent.com/fernvenue/chn-cidr-list/master/ipv4.yaml"
-    )
 
     fun fromLink(link: String): NodeConfig {
         val trimmedLink = link.trim()
@@ -82,7 +79,7 @@ object ShortLinkCodec {
             enablePureDownlink = enablePureDownlink,
             localPort = local,
             proxyMode = ProxyMode.PAC,
-            ruleUrls = defaultRuleUrls,
+            ruleUrls = DEFAULT_PAC_RULE_URLS,
             customTable = effectivePrimaryTable,
             customTables = customTables,
             disableHttpMask = payload.disableHttpMask,

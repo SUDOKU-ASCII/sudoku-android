@@ -1,6 +1,7 @@
 package com.futaiii.sudodroid.net
 
 import android.util.Log
+import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
@@ -143,12 +144,15 @@ object GoCoreClient {
             }
     }
 
-    fun buildConfigJson(node: NodeConfig): String {
-        val resolved = ServerAddressResolver.resolve(node)
+    fun buildConfigJson(
+        node: NodeConfig,
+        globalProxySettings: GlobalProxySettings = GlobalProxySettings()
+    ): String {
+        val resolved = ServerAddressResolver.resolve(node, globalProxySettings.ipMode)
         val serverAddress = resolved.serverAddress
-        val proxyMode = node.proxyMode.wireValue
-        val ruleUrls = if (node.proxyMode == ProxyMode.PAC) {
-            node.ruleUrls.mapNotNull { url ->
+        val proxyMode = globalProxySettings.proxyMode.wireValue
+        val ruleUrls = if (globalProxySettings.proxyMode == ProxyMode.PAC) {
+            globalProxySettings.ruleUrls.mapNotNull { url ->
                 val trimmed = url.trim()
                 trimmed.takeIf { it.isNotEmpty() }
             }

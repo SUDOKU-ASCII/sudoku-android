@@ -16,6 +16,7 @@ import com.futaiii.sudodroid.R
 import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
+import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.qs.VpnTileService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -108,6 +109,11 @@ class SudokuVpnService : VpnService() {
                         return START_STICKY
                     }
                     statusFlow.value = false
+                    runCatching {
+                        startService(Intent(this, ProxyOnlyService::class.java).apply {
+                            action = ProxyOnlyService.ACTION_STOP
+                        })
+                    }
                     ensureNotificationChannel()
                     startForeground(NOTI_ID, buildNotification(null))
 
@@ -334,8 +340,10 @@ class SudokuVpnService : VpnService() {
         """.trimIndent()
     }
 
-    private fun startCore(node: NodeConfig) {
-        val json = GoCoreClient.buildConfigJson(node)
+    private suspend fun startCore(node: NodeConfig) {
+        val repo = (application as SudodroidApp).nodeRepository
+        val global = repo.globalProxySettings.first()
+        val json = GoCoreClient.buildConfigJson(node, global)
         GoCoreClient.start(json)
         GoCoreClient.resetTrafficStats()
     }

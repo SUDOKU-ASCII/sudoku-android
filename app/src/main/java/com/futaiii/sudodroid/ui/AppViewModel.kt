@@ -5,10 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.futaiii.sudodroid.data.GlobalProxySettings
+import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
+import com.futaiii.sudodroid.data.ProxyMode
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.net.ServerAddressResolver
+import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -32,7 +36,9 @@ data class NodeUi(
 data class AppState(
     val nodes: ImmutableList<NodeUi> = persistentListOf(),
     val activeId: String? = null,
+    val globalProxySettings: GlobalProxySettings = GlobalProxySettings(),
     val isVpnRunning: Boolean = false,
+    val isProxyOnlyRunning: Boolean = false,
     val reverseForwardStatus: GoCoreClient.ReverseForwardStatus = GoCoreClient.ReverseForwardStatus(),
     val reverseForwardBusy: Boolean = false,
     val error: String? = null
@@ -85,11 +91,12 @@ class AppViewModel(
 
     private val baseState = combine(
         repo.nodes,
+        repo.globalProxySettings,
         activeId,
         latencyMap,
         reverseForwardStatus,
         reverseForwardBusy
-    ) { nodes, active, latency, reverseStatus, reverseBusy ->
+    ) { nodes, globalSettings, active, latency, reverseStatus, reverseBusy ->
         AppState(
             nodes = nodes.map {
                 NodeUi(
@@ -99,6 +106,7 @@ class AppViewModel(
                 )
             }.toImmutableList(),
             activeId = active,
+            globalProxySettings = globalSettings,
             reverseForwardStatus = reverseStatus,
             reverseForwardBusy = reverseBusy
         )
@@ -107,9 +115,15 @@ class AppViewModel(
     val state: StateFlow<AppState> = combine(
         baseState,
         SudokuVpnService.status,
+        ProxyOnlyService.status,
         error
-    ) { base, vpnRunning, err -> base.copy(isVpnRunning = vpnRunning, error = err) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
+    ) { base, vpnRunning, proxyOnlyRunning, err ->
+        base.copy(
+            isVpnRunning = vpnRunning,
+            isProxyOnlyRunning = proxyOnlyRunning,
+            error = err
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
     fun selectNode(id: String) {
         activeId.value = id
@@ -145,18 +159,19 @@ class AppViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val start = System.nanoTime()
             val latency = kotlin.runCatching {
-                val proxy = if (state.value.isVpnRunning && state.value.activeId == node.id) {
-                    // If VPN is running for this node, use the local SOCKS proxy to test real connectivity
+                val current = state.value
+                val shouldUseProxy = (current.isVpnRunning || current.isProxyOnlyRunning) && current.activeId == node.id
+                val proxy = if (shouldUseProxy) {
                     java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", node.localPort))
                 } else {
                     java.net.Proxy.NO_PROXY
                 }
-                
+
                 val socket = java.net.Socket(proxy)
                 socket.tcpNoDelay = true
                 // Connect to the server port. If using proxy, this tests Client -> Proxy -> Server.
                 // If direct, this tests Client -> Server.
-                val resolved = ServerAddressResolver.resolve(node)
+                val resolved = ServerAddressResolver.resolve(node, current.globalProxySettings.ipMode)
                 socket.connect(java.net.InetSocketAddress(resolved.host, resolved.port), 5_000)
                 socket.close()
                 kotlin.math.abs((System.nanoTime() - start) / 1_000_000L)
@@ -166,8 +181,8 @@ class AppViewModel(
     }
 
     fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
-        if (state.value.isVpnRunning) {
-            error.value = "Please stop VPN before starting local forwarder"
+        if (state.value.isVpnRunning || state.value.isProxyOnlyRunning) {
+            error.value = "Please stop VPN / proxy-only mode before starting local forwarder"
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -189,6 +204,27 @@ class AppViewModel(
                 .onFailure { error.value = it.message ?: "Failed to stop local forwarder" }
             reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
             reverseForwardBusy.value = false
+        }
+    }
+
+    fun updateGlobalProxySettings(
+        proxyMode: ProxyMode,
+        ipMode: IpMode,
+        ruleUrlsText: String
+    ) {
+        viewModelScope.launch {
+            val sanitizedRuleUrls = ruleUrlsText.lines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
+            val finalRuleUrls = if (proxyMode == ProxyMode.PAC) sanitizedRuleUrls else emptyList()
+            repo.saveGlobalProxySettings(
+                GlobalProxySettings(
+                    proxyMode = proxyMode,
+                    ipMode = ipMode,
+                    ruleUrls = finalRuleUrls
+                )
+            )
         }
     }
 

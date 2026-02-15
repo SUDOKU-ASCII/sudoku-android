@@ -14,7 +14,7 @@ data class ResolvedServerAddress(
 )
 
 object ServerAddressResolver {
-    fun resolve(node: NodeConfig): ResolvedServerAddress {
+    fun resolve(node: NodeConfig, ipMode: IpMode = node.ipMode): ResolvedServerAddress {
         val host = stripHost(node.host)
         val port = node.port
         val isLiteral = isIpv4Literal(host) || isIpv6Literal(host)
@@ -32,7 +32,7 @@ object ServerAddressResolver {
         val ipv4 = addresses.filterIsInstance<Inet4Address>()
         val ipv6 = addresses.filterIsInstance<Inet6Address>()
 
-        val picked = when (node.ipMode) {
+        val picked = when (ipMode) {
             // Keep "Default" aligned with what most users expect from other clients:
             // prefer IPv4 when available, otherwise fall back to IPv6.
             IpMode.DEFAULT -> ipv4.firstOrNull() ?: ipv6.firstOrNull()
@@ -41,7 +41,7 @@ object ServerAddressResolver {
         }
 
         val selected = picked ?: throw IllegalStateException(
-            when (node.ipMode) {
+            when (ipMode) {
                 IpMode.DEFAULT -> "No IPv4/IPv6 address found for $host"
                 IpMode.IPV4_ONLY -> "No IPv4 address found for $host"
                 IpMode.IPV6_PREFERRED -> "No IPv4/IPv6 address found for $host"

@@ -10,6 +10,21 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import java.util.UUID
 
+val DEFAULT_PAC_RULE_URLS: List<String> = listOf(
+    "https://gh-proxy.org/https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/China/China.list",
+    "https://gh-proxy.org/https://raw.githubusercontent.com/fernvenue/chn-cidr-list/master/ipv4.yaml"
+)
+
+@Serializable
+data class GlobalProxySettings(
+    @SerialName("proxy_mode")
+    val proxyMode: ProxyMode = ProxyMode.GLOBAL,
+    @SerialName("rule_urls")
+    val ruleUrls: List<String> = DEFAULT_PAC_RULE_URLS,
+    @SerialName("ip_mode")
+    val ipMode: IpMode = IpMode.DEFAULT
+)
+
 @Serializable
 data class NodeConfig(
     val id: String = UUID.randomUUID().toString(),
