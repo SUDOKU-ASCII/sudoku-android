@@ -55,6 +55,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -93,6 +94,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -608,13 +611,48 @@ private fun GlobalSettingsCard(
             }
 
             if (proxyMode == ProxyMode.PAC) {
-                OutlinedTextField(
-                    value = ruleUrls,
-                    onValueChange = onRuleUrlsChange,
-                    label = { Text("Rule URLs (one per line)") },
-                    minLines = 2,
+                Text("PAC Rules", style = MaterialTheme.typography.labelMedium)
+                val lines = ruleUrls.lines()
+                lines.forEachIndexed { index, line ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = line,
+                            onValueChange = { newValue ->
+                                val newLines = lines.toMutableList()
+                                newLines[index] = newValue
+                                onRuleUrlsChange(newLines.joinToString("\n"))
+                            },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            label = null
+                        )
+                        IconButton(
+                            onClick = {
+                                val newLines = lines.toMutableList()
+                                newLines.removeAt(index)
+                                onRuleUrlsChange(newLines.joinToString("\n"))
+                            }
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete rule")
+                        }
+                    }
+                }
+                FilledTonalButton(
+                    onClick = {
+                        val newLines = lines.toMutableList()
+                        newLines.add("")
+                        onRuleUrlsChange(newLines.joinToString("\n"))
+                    },
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Rule")
+                }
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -649,8 +687,15 @@ private fun ReverseForwarderCard(
             containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
         )
     ) {
+        val focusManager = LocalFocusManager.current
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .padding(16.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                    })
+                },
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -676,7 +721,9 @@ private fun ReverseForwarderCard(
                 label = { Text("rev-dial (ws:// or wss://)") },
                 singleLine = true,
                 enabled = !status.running && !isBusy,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
             )
             OutlinedTextField(
                 value = listenAddr,
@@ -684,7 +731,9 @@ private fun ReverseForwarderCard(
                 label = { Text("rev-listen (e.g. 127.0.0.1:2222)") },
                 singleLine = true,
                 enabled = !status.running && !isBusy,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
             )
 
             Row(
