@@ -140,19 +140,30 @@ fun AppRoot(
     var pendingDelete by remember { mutableStateOf<NodeConfig?>(null) }
     var pendingSwitch by remember { mutableStateOf<NodeConfig?>(null) }
     var runningMode by rememberSaveable { mutableStateOf(RunningMode.VPN) }
-    var reverseDialUrl by rememberSaveable { mutableStateOf("wss://example.com:8081/ssh") }
-    var reverseListenAddr by rememberSaveable { mutableStateOf("127.0.0.1:2222") }
-    var reverseInsecure by rememberSaveable { mutableStateOf(false) }
+    var reverseDialUrl by rememberSaveable { mutableStateOf(state.reverseForwarderSettings.dialUrl) }
+    var reverseListenAddr by rememberSaveable { mutableStateOf(state.reverseForwarderSettings.listenAddr) }
+    var reverseInsecure by rememberSaveable { mutableStateOf(state.reverseForwarderSettings.insecure) }
     var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.PAC) }
     var globalIpMode by rememberSaveable { mutableStateOf(IpMode.DEFAULT) }
     var globalRuleUrlsText by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
+    var reverseSettingsInitialized by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
         val err = state.error
         if (err != null) {
             snackbarHostState.showSnackbar(err)
             viewModel.clearError()
+        }
+    }
+
+    // Load persisted reverse forwarder settings on first composition
+    LaunchedEffect(state.reverseForwarderSettings) {
+        if (!reverseSettingsInitialized) {
+            reverseDialUrl = state.reverseForwarderSettings.dialUrl
+            reverseListenAddr = state.reverseForwarderSettings.listenAddr
+            reverseInsecure = state.reverseForwarderSettings.insecure
+            reverseSettingsInitialized = true
         }
     }
 
@@ -294,9 +305,18 @@ fun AppRoot(
                         dialUrl = reverseDialUrl,
                         listenAddr = reverseListenAddr,
                         insecure = reverseInsecure,
-                        onDialUrlChange = { reverseDialUrl = it },
-                        onListenAddrChange = { reverseListenAddr = it },
-                        onInsecureChange = { reverseInsecure = it },
+                        onDialUrlChange = {
+                            reverseDialUrl = it
+                            viewModel.saveReverseForwarderSettings(it, reverseListenAddr, reverseInsecure)
+                        },
+                        onListenAddrChange = {
+                            reverseListenAddr = it
+                            viewModel.saveReverseForwarderSettings(reverseDialUrl, it, reverseInsecure)
+                        },
+                        onInsecureChange = {
+                            reverseInsecure = it
+                            viewModel.saveReverseForwarderSettings(reverseDialUrl, reverseListenAddr, it)
+                        },
                         onStart = {
                             viewModel.startReverseForwarder(
                                 listenAddr = reverseListenAddr,

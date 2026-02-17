@@ -18,6 +18,7 @@ class NodeRepository(private val context: Context) {
     private val keyNodes = stringPreferencesKey("nodes_json")
     private val keyActiveId = stringPreferencesKey("active_node_id")
     private val keyGlobalProxySettings = stringPreferencesKey("global_proxy_settings_json")
+    private val keyReverseForwarderSettings = stringPreferencesKey("reverse_forwarder_settings_json")
 
     val nodes: Flow<List<NodeConfig>> = context.nodeDataStore.data.map { prefs ->
         prefs[keyNodes]?.let { stored ->
@@ -30,6 +31,13 @@ class NodeRepository(private val context: Context) {
             runCatching { json.decodeFromString<GlobalProxySettings>(stored) }
                 .getOrNull()
         } ?: GlobalProxySettings()
+    }
+
+    val reverseForwarderSettings: Flow<ReverseForwarderSettings> = context.nodeDataStore.data.map { prefs ->
+        prefs[keyReverseForwarderSettings]?.let { stored ->
+            runCatching { json.decodeFromString<ReverseForwarderSettings>(stored) }
+                .getOrNull()
+        } ?: ReverseForwarderSettings()
     }
 
     val lastActiveId: Flow<String?> = context.nodeDataStore.data.map { prefs ->
@@ -61,6 +69,12 @@ class NodeRepository(private val context: Context) {
     suspend fun saveGlobalProxySettings(settings: GlobalProxySettings) {
         context.nodeDataStore.edit { prefs ->
             prefs[keyGlobalProxySettings] = json.encodeToString(settings)
+        }
+    }
+
+    suspend fun saveReverseForwarderSettings(settings: ReverseForwarderSettings) {
+        context.nodeDataStore.edit { prefs ->
+            prefs[keyReverseForwarderSettings] = json.encodeToString(settings)
         }
     }
 

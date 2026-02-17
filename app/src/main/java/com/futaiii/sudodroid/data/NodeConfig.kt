@@ -26,6 +26,13 @@ data class GlobalProxySettings(
 )
 
 @Serializable
+data class ReverseForwarderSettings(
+    @SerialName("dial_url") val dialUrl: String = "wss://example.com:8081/ssh",
+    @SerialName("listen_addr") val listenAddr: String = "127.0.0.1:2222",
+    val insecure: Boolean = false
+)
+
+@Serializable
 data class NodeConfig(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",

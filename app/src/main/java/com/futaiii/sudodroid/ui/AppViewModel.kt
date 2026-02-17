@@ -10,6 +10,7 @@ import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
 import com.futaiii.sudodroid.data.ProxyMode
+import com.futaiii.sudodroid.data.ReverseForwarderSettings
 import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.net.ServerAddressResolver
@@ -42,6 +43,7 @@ data class AppState(
     val isProxyOnlyRunning: Boolean = false,
     val reverseForwardStatus: GoCoreClient.ReverseForwardStatus = GoCoreClient.ReverseForwardStatus(),
     val reverseForwardBusy: Boolean = false,
+    val reverseForwarderSettings: ReverseForwarderSettings = ReverseForwarderSettings(),
     val error: String? = null
 )
 
@@ -111,9 +113,10 @@ class AppViewModel(
                 reverseForwardStatus = reverseStatus
             )
         },
-        reverseForwardBusy
-    ) { partial, reverseBusy ->
-        partial.copy(reverseForwardBusy = reverseBusy)
+        reverseForwardBusy,
+        repo.reverseForwarderSettings
+    ) { partial, reverseBusy, revFwdSettings ->
+        partial.copy(reverseForwardBusy = reverseBusy, reverseForwarderSettings = revFwdSettings)
     }
 
     val state: StateFlow<AppState> = combine(
@@ -238,6 +241,18 @@ class AppViewModel(
 
     fun clearError() {
         error.value = null
+    }
+
+    fun saveReverseForwarderSettings(dialUrl: String, listenAddr: String, insecure: Boolean) {
+        viewModelScope.launch {
+            repo.saveReverseForwarderSettings(
+                ReverseForwarderSettings(
+                    dialUrl = dialUrl,
+                    listenAddr = listenAddr,
+                    insecure = insecure
+                )
+            )
+        }
     }
 }
 

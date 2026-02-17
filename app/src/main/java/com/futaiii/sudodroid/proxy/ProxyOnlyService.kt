@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -110,7 +111,11 @@ class ProxyOnlyService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        runCatching { GoCoreClient.stop() }
+        // Only tear down the Go core if VPN is NOT running; if VPN is active,
+        // the core belongs to the VPN service now.
+        if (!SudokuVpnService.isRunning) {
+            runCatching { GoCoreClient.stop() }
+        }
         stopNotificationUpdates()
         statusFlow.value = false
         activeNodeIdFlow.value = null
@@ -172,7 +177,10 @@ class ProxyOnlyService : Service() {
         startJob?.cancel()
         startJob = null
         stopNotificationUpdates()
-        runCatching { GoCoreClient.stop() }
+        // Only tear down the Go core if VPN is NOT running.
+        if (!SudokuVpnService.isRunning) {
+            runCatching { GoCoreClient.stop() }
+        }
         coreRunning = false
         activeNode = null
         statusFlow.value = false
@@ -250,5 +258,24 @@ class ProxyOnlyService : Service() {
 
         private val activeNodeIdFlow = MutableStateFlow<String?>(null)
         val activeNodeId: StateFlow<String?> = activeNodeIdFlow
+
+        /**
+         * Called synchronously by SudokuVpnService before it starts its own core.
+         * This immediately marks proxy-only as stopped so the service's coroutine
+         * won't issue a delayed GoCoreClient.stop() that kills the VPN's core.
+         * A cleanup intent is sent to properly tear down the foreground notification.
+         */
+        fun requestStopFromVpn(context: Context) {
+            // Synchronously clear status to prevent any in-flight coroutine
+            // from calling GoCoreClient.stop() after VPN starts.
+            statusFlow.value = false
+            activeNodeIdFlow.value = null
+            // Fire-and-forget cleanup intent for foreground / notification.
+            runCatching {
+                context.startService(Intent(context, ProxyOnlyService::class.java).apply {
+                    action = ACTION_STOP
+                })
+            }
+        }
     }
 }
