@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 object GoCoreClient {
     private const val TAG = "GoCoreClient"
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
+    private val lifecycleLock = Any()
     // gomobile bind -javapkg com.futaiii.sudoku ./pkg/mobile
     // generates class com.futaiii.sudoku.mobile.Mobile
     private const val MOBILE_CLASS = "com.futaiii.sudoku.mobile.Mobile"
@@ -98,19 +99,23 @@ object GoCoreClient {
         }
     }
 
+    private inline fun <T> withLifecycleLock(block: () -> T): T = synchronized(lifecycleLock) { block() }
+
     fun start(configJson: String) {
-        // Ensure previous instance is stopped
-        runCatching { MobileBinding.stop() }
-        try {
-            MobileBinding.start(configJson)
-        } catch (t: Throwable) {
-            Log.e(TAG, "Failed to start Go core", t)
-            throw t
+        withLifecycleLock {
+            // Ensure previous instance is stopped
+            runCatching { MobileBinding.stop() }
+            try {
+                MobileBinding.start(configJson)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to start Go core", t)
+                throw t
+            }
         }
     }
 
     fun stop() {
-        MobileBinding.stop()
+        withLifecycleLock { MobileBinding.stop() }
     }
 
     fun getTrafficStats(): TrafficStats? {
@@ -123,16 +128,18 @@ object GoCoreClient {
     }
 
     fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
-        try {
-            MobileBinding.startReverseForwarder(listenAddr.trim(), dialUrl.trim(), insecure)
-        } catch (t: Throwable) {
-            Log.e(TAG, "Failed to start reverse forwarder", t)
-            throw t
+        withLifecycleLock {
+            try {
+                MobileBinding.startReverseForwarder(listenAddr.trim(), dialUrl.trim(), insecure)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to start reverse forwarder", t)
+                throw t
+            }
         }
     }
 
     fun stopReverseForwarder() {
-        MobileBinding.stopReverseForwarder()
+        withLifecycleLock { MobileBinding.stopReverseForwarder() }
     }
 
     fun getReverseForwardStatus(): ReverseForwardStatus {

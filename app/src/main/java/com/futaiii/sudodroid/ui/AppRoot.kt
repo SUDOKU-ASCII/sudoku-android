@@ -140,14 +140,13 @@ fun AppRoot(
     var pendingDelete by remember { mutableStateOf<NodeConfig?>(null) }
     var pendingSwitch by remember { mutableStateOf<NodeConfig?>(null) }
     var runningMode by rememberSaveable { mutableStateOf(RunningMode.VPN) }
-    var reverseDialUrl by rememberSaveable { mutableStateOf(state.reverseForwarderSettings.dialUrl) }
-    var reverseListenAddr by rememberSaveable { mutableStateOf(state.reverseForwarderSettings.listenAddr) }
-    var reverseInsecure by rememberSaveable { mutableStateOf(state.reverseForwarderSettings.insecure) }
+    var reverseDialUrl by rememberSaveable { mutableStateOf("") }
+    var reverseListenAddr by rememberSaveable { mutableStateOf("") }
+    var reverseInsecure by rememberSaveable { mutableStateOf(false) }
     var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.PAC) }
     var globalIpMode by rememberSaveable { mutableStateOf(IpMode.DEFAULT) }
     var globalRuleUrlsText by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
-    var reverseSettingsInitialized by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
         val err = state.error
@@ -157,13 +156,11 @@ fun AppRoot(
         }
     }
 
-    // Load persisted reverse forwarder settings on first composition
-    LaunchedEffect(state.reverseForwarderSettings) {
-        if (!reverseSettingsInitialized) {
+    LaunchedEffect(state.reverseForwarderSettings, state.reverseForwardStatus.running) {
+        if (!state.reverseForwardStatus.running) {
             reverseDialUrl = state.reverseForwarderSettings.dialUrl
             reverseListenAddr = state.reverseForwarderSettings.listenAddr
             reverseInsecure = state.reverseForwarderSettings.insecure
-            reverseSettingsInitialized = true
         }
     }
 

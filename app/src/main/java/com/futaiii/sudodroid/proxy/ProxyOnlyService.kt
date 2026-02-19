@@ -36,14 +36,17 @@ class ProxyOnlyService : Service() {
     private var notificationJob: Job? = null
     private var activeNode: NodeConfig? = null
     private var coreRunning = false
+    private var skipStopCoreOnDestroy = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                val skipStopCore = intent.getBooleanExtra(EXTRA_SKIP_STOP_CORE, false)
+                skipStopCoreOnDestroy = skipStopCore
                 scope.launch {
-                    stopProxyInternal()
+                    stopProxyInternal(stopCore = !skipStopCore)
                     stopSelf()
                 }
                 return START_NOT_STICKY
@@ -95,7 +98,7 @@ class ProxyOnlyService : Service() {
                     val node = selectNode(requestedId, allowFallback = true)
                     if (node == null) {
                         Log.e(TAG, "Cannot start proxy-only mode: node not found")
-                        stopProxyInternal()
+                        stopProxyInternal(stopCore = true)
                         stopSelf()
                         return@launch
                     }
@@ -111,9 +114,9 @@ class ProxyOnlyService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Only tear down the Go core if VPN is NOT running; if VPN is active,
-        // the core belongs to the VPN service now.
-        if (!SudokuVpnService.isRunning) {
+        // Only tear down the Go core if VPN is NOT running and we're not handing off
+        // to VPN. During handoff, SudokuVpnService will restart the core itself.
+        if (!skipStopCoreOnDestroy && !SudokuVpnService.isRunning) {
             runCatching { GoCoreClient.stop() }
         }
         stopNotificationUpdates()
@@ -135,7 +138,7 @@ class ProxyOnlyService : Service() {
             Log.i(TAG, "Proxy-only start cancelled")
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to start proxy-only mode", e)
-            stopProxyInternal()
+            stopProxyInternal(stopCore = true)
             stopSelf()
         }
     }
@@ -173,12 +176,13 @@ class ProxyOnlyService : Service() {
         notificationJob = null
     }
 
-    private fun stopProxyInternal() {
+    private fun stopProxyInternal(stopCore: Boolean) {
+        skipStopCoreOnDestroy = !stopCore
         startJob?.cancel()
         startJob = null
         stopNotificationUpdates()
-        // Only tear down the Go core if VPN is NOT running.
-        if (!SudokuVpnService.isRunning) {
+        // Only tear down the Go core if asked and VPN is NOT running.
+        if (stopCore && !SudokuVpnService.isRunning) {
             runCatching { GoCoreClient.stop() }
         }
         coreRunning = false
@@ -248,6 +252,7 @@ class ProxyOnlyService : Service() {
         const val EXTRA_NODE_ID = "nodeId"
         const val ACTION_STOP = "com.futaiii.sudodroid.proxy.STOP"
         const val ACTION_SWITCH_NODE = "com.futaiii.sudodroid.proxy.SWITCH_NODE"
+        const val EXTRA_SKIP_STOP_CORE = "com.futaiii.sudodroid.proxy.SKIP_STOP_CORE"
 
         private const val CHANNEL_ID = "sudoku_proxy_only"
         private const val NOTI_ID = 2
@@ -274,6 +279,7 @@ class ProxyOnlyService : Service() {
             runCatching {
                 context.startService(Intent(context, ProxyOnlyService::class.java).apply {
                     action = ACTION_STOP
+                    putExtra(EXTRA_SKIP_STOP_CORE, true)
                 })
             }
         }

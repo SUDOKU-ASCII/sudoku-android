@@ -109,11 +109,8 @@ class SudokuVpnService : VpnService() {
                         return START_STICKY
                     }
                     statusFlow.value = false
-                    // Synchronously mark proxy-only as stopped so its coroutine
-                    // won't race with our upcoming GoCoreClient.start().
-                    // GoCoreClient.start() already calls stop() internally, so we
-                    // just need to prevent ProxyOnlyService from doing a delayed
-                    // stop() that would kill our newly-started core.
+                    // Tear down proxy-only foreground state (if any) without letting
+                    // ProxyOnlyService issue a late GoCoreClient.stop() during VPN start.
                     ProxyOnlyService.requestStopFromVpn(this@SudokuVpnService)
                     ensureNotificationChannel()
                     startForeground(NOTI_ID, buildNotification(null))
