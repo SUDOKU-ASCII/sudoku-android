@@ -780,13 +780,6 @@ private fun ReverseForwarderCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            if (isVpnRunning || isProxyOnlyRunning) {
-                Text(
-                    text = "Stop VPN / proxy-only mode first before starting local forwarder.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
             if (status.lastError.isNotBlank()) {
                 Text(
                     text = "Last error: ${status.lastError}",
@@ -816,7 +809,7 @@ private fun ReverseForwarderCard(
                 } else {
                     FilledTonalButton(
                         onClick = onStart,
-                        enabled = !isBusy && !isVpnRunning && !isProxyOnlyRunning && dialUrl.isNotBlank() && listenAddr.isNotBlank()
+                        enabled = !isBusy && dialUrl.isNotBlank() && listenAddr.isNotBlank()
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Spacer(Modifier.width(8.dp))

@@ -188,10 +188,6 @@ class AppViewModel(
     }
 
     fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
-        if (state.value.isVpnRunning || state.value.isProxyOnlyRunning) {
-            error.value = "Please stop VPN / proxy-only mode before starting local forwarder"
-            return
-        }
         viewModelScope.launch(Dispatchers.IO) {
             reverseForwardBusy.value = true
             runCatching {

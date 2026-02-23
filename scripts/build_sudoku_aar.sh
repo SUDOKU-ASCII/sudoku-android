@@ -546,15 +546,19 @@ package mobile
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -586,7 +590,164 @@ var (
 	instance        *app.MobileInstance
 	reverseInstance *reverseForwardInstance
 	reverseStatus   reverseForwardStatus
+	coreLocalPort   int32
 )
+
+func dialSocks5(ctx context.Context, proxyAddr, targetAddr string) (net.Conn, error) {
+	proxyAddr = strings.TrimSpace(proxyAddr)
+	targetAddr = strings.TrimSpace(targetAddr)
+	if proxyAddr == "" {
+		return nil, fmt.Errorf("empty proxy address")
+	}
+	if targetAddr == "" {
+		return nil, fmt.Errorf("empty target address")
+	}
+
+	host, portStr, err := net.SplitHostPort(targetAddr)
+	if err != nil {
+		return nil, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("invalid port: %q", portStr)
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", proxyAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+
+	fail := func(e error) (net.Conn, error) {
+		_ = conn.Close()
+		return nil, e
+	}
+
+	// Greeting: VER=5, NMETHODS=1, METHODS=[0x00 no-auth]
+	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+		return fail(err)
+	}
+	choice := make([]byte, 2)
+	if _, err := io.ReadFull(conn, choice); err != nil {
+		return fail(err)
+	}
+	if choice[0] != 0x05 || choice[1] != 0x00 {
+		return fail(fmt.Errorf("socks5 no-auth not accepted"))
+	}
+
+	// CONNECT request.
+	req := make([]byte, 0, 6+len(host))
+	req = append(req, 0x05, 0x01, 0x00) // VER, CMD=CONNECT, RSV
+
+	if ip := net.ParseIP(host); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			req = append(req, 0x01)
+			req = append(req, ip4...)
+		} else if ip16 := ip.To16(); ip16 != nil {
+			req = append(req, 0x04)
+			req = append(req, ip16...)
+		} else {
+			return fail(fmt.Errorf("invalid ip: %q", host))
+		}
+	} else {
+		if len(host) > 255 {
+			return fail(fmt.Errorf("domain too long"))
+		}
+		req = append(req, 0x03, byte(len(host)))
+		req = append(req, []byte(host)...)
+	}
+
+	portBuf := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBuf, uint16(port))
+	req = append(req, portBuf...)
+
+	if _, err := conn.Write(req); err != nil {
+		return fail(err)
+	}
+
+	// Reply: VER, REP, RSV, ATYP, BND.ADDR, BND.PORT
+	hdr := make([]byte, 4)
+	if _, err := io.ReadFull(conn, hdr); err != nil {
+		return fail(err)
+	}
+	if hdr[0] != 0x05 {
+		return fail(fmt.Errorf("invalid socks5 reply version"))
+	}
+	if hdr[1] != 0x00 {
+		return fail(fmt.Errorf("socks5 connect failed (rep=%d)", hdr[1]))
+	}
+
+	atyp := hdr[3]
+	var addrLen int
+	switch atyp {
+	case 0x01:
+		addrLen = 4
+	case 0x04:
+		addrLen = 16
+	case 0x03:
+		l := make([]byte, 1)
+		if _, err := io.ReadFull(conn, l); err != nil {
+			return fail(err)
+		}
+		addrLen = int(l[0])
+	default:
+		return fail(fmt.Errorf("unknown socks5 atyp=%d", atyp))
+	}
+	if addrLen > 0 {
+		if _, err := io.ReadFull(conn, make([]byte, addrLen)); err != nil {
+			return fail(err)
+		}
+	}
+	if _, err := io.ReadFull(conn, make([]byte, 2)); err != nil {
+		return fail(err)
+	}
+
+	_ = conn.SetDeadline(time.Time{})
+	return conn, nil
+}
+
+func dialTCPWithFallback(ctx context.Context, network, addr string) (net.Conn, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	directCtx, directCancel := context.WithTimeout(ctx, 3*time.Second)
+	conn, err := (&net.Dialer{}).DialContext(directCtx, network, addr)
+	directCancel()
+	if err == nil {
+		return conn, nil
+	}
+
+	port := atomic.LoadInt32(&coreLocalPort)
+	if port <= 0 || port > 65535 {
+		return nil, err
+	}
+	proxyAddr := fmt.Sprintf("127.0.0.1:%d", port)
+	pConn, pErr := dialSocks5(ctx, proxyAddr, addr)
+	if pErr == nil {
+		return pConn, nil
+	}
+	return nil, fmt.Errorf("dial failed (direct: %v; via socks5(%s): %v)", err, proxyAddr, pErr)
+}
+
+func wsHTTPClientForDial(insecure bool, scheme string) *http.Client {
+	tr := &http.Transport{
+		ForceAttemptHTTP2: false,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialTCPWithFallback(ctx, network, addr)
+		},
+	}
+	if insecure && strings.EqualFold(scheme, "wss") {
+		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	return &http.Client{Transport: tr}
+}
 
 func stopReverseForwarderLocked() {
 	if reverseInstance == nil {
@@ -636,14 +797,7 @@ func startReverseForwarderLocked(listenAddr, dialURL string, insecure bool) erro
 		return fmt.Errorf("dial url missing host: %q", dialURL)
 	}
 
-	var wsHTTPClient *http.Client
-	if insecure && strings.EqualFold(u.Scheme, "wss") {
-		wsHTTPClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-		}
-	}
+	wsHTTPClient := wsHTTPClientForDial(insecure, u.Scheme)
 
 	// Preflight: validate dialURL + subprotocol once so we fail early (instead of "Running" + SSH reset).
 	{
@@ -655,7 +809,7 @@ func startReverseForwarderLocked(listenAddr, dialURL string, insecure bool) erro
 		})
 		cancel()
 		if err != nil {
-			return fmt.Errorf("failed to WebSocket dial: %w", err)
+			return fmt.Errorf("preflight: %w", err)
 		}
 		if ws.Subprotocol() != sudokuTCPSubprotocol {
 			_ = ws.Close(websocket.StatusPolicyViolation, "subprotocol required")
@@ -743,12 +897,7 @@ func StartReverseForwarder(listenAddr, dialURL string, insecure bool) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if instance != nil {
-		instance.Stop()
-		instance = nil
-	}
 	stopReverseForwarderLocked()
-	app.ResetTrafficStats()
 	return startReverseForwarderLocked(listenAddr, dialURL, insecure)
 }
 
@@ -777,7 +926,6 @@ func Start(jsonConfig string) error {
 		instance.Stop()
 		instance = nil
 	}
-	stopReverseForwarderLocked()
 	app.ResetTrafficStats()
 
 	var cfg config.Config
@@ -795,6 +943,7 @@ func Start(jsonConfig string) error {
 	if err := cfg.Finalize(); err != nil {
 		return err
 	}
+	atomic.StoreInt32(&coreLocalPort, int32(cfg.LocalPort))
 
 	inst, err := app.StartMobileClient(&cfg)
 	if err != nil {
@@ -824,7 +973,6 @@ func Stop() {
 		instance.Stop()
 		instance = nil
 	}
-	stopReverseForwarderLocked()
 	app.ResetTrafficStats()
 }
 EOF
