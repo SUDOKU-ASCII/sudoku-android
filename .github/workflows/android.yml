@@ -366,6 +366,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Core: sudoku ${{ github.ref_name }}
+            - Core: sudoku v0.2.5
             - Update default PAC rules
             - Fix reverse forwarder + DNS IP preference
