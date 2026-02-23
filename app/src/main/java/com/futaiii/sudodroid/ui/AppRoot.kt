@@ -282,6 +282,18 @@ fun AppRoot(
                         },
                         onIpModeChange = { globalIpMode = it },
                         onRuleUrlsChange = { globalRuleUrlsText = it },
+                        onSetDefaultPacRules = {
+                            globalProxyMode = ProxyMode.PAC
+                            globalRuleUrlsText = defaultPacRuleUrlsText
+                            viewModel.updateGlobalProxySettings(
+                                proxyMode = ProxyMode.PAC,
+                                ipMode = globalIpMode,
+                                ruleUrlsText = defaultPacRuleUrlsText
+                            )
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Default PAC rules applied")
+                            }
+                        },
                         onSave = {
                             viewModel.updateGlobalProxySettings(
                                 proxyMode = globalProxyMode,
@@ -567,6 +579,7 @@ private fun GlobalSettingsCard(
     onProxyModeChange: (ProxyMode) -> Unit,
     onIpModeChange: (IpMode) -> Unit,
     onRuleUrlsChange: (String) -> Unit,
+    onSetDefaultPacRules: () -> Unit,
     onSave: () -> Unit
 ) {
     ElevatedCard(
@@ -629,6 +642,14 @@ private fun GlobalSettingsCard(
 
             if (proxyMode == ProxyMode.PAC) {
                 Text("PAC Rules", style = MaterialTheme.typography.labelMedium)
+                FilledTonalButton(
+                    onClick = onSetDefaultPacRules,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Use Default List")
+                }
                 val lines = ruleUrls.lines()
                 lines.forEachIndexed { index, line ->
                     Row(
