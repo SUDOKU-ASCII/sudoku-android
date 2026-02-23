@@ -157,6 +157,11 @@ object GoCoreClient {
     ): String {
         val resolved = ServerAddressResolver.resolve(node, globalProxySettings.ipMode)
         val serverAddress = resolved.serverAddress
+        val ipMode = when (globalProxySettings.ipMode) {
+            com.futaiii.sudodroid.data.IpMode.DEFAULT -> "default"
+            com.futaiii.sudodroid.data.IpMode.IPV4_ONLY -> "ipv4_only"
+            com.futaiii.sudodroid.data.IpMode.IPV6_PREFERRED -> "ipv6_preferred"
+        }
         val proxyMode = globalProxySettings.proxyMode.wireValue
         val ruleUrls = if (globalProxySettings.proxyMode == ProxyMode.PAC) {
             globalProxySettings.ruleUrls.mapNotNull { url ->
@@ -192,6 +197,7 @@ object GoCoreClient {
             aead = node.aead.wireName,
             paddingMin = node.paddingMin,
             paddingMax = node.paddingMax,
+            ipMode = ipMode,
             ruleUrls = ruleUrls,
             ascii = node.asciiMode.wireValue,
             customTable = primaryCustomTable.orEmpty(),
@@ -219,6 +225,7 @@ object GoCoreClient {
         @SerialName("suspicious_action") val suspiciousAction: String = "fallback",
         @SerialName("padding_min") val paddingMin: Int,
         @SerialName("padding_max") val paddingMax: Int,
+        @SerialName("ip_mode") val ipMode: String = "default",
         @SerialName("rule_urls") val ruleUrls: List<String> = emptyList(),
         val ascii: String,
         @SerialName("custom_table") val customTable: String = "",
