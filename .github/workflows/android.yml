@@ -85,6 +85,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+          SUDOKU_REF: main
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -366,6 +367,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Core: sudoku v0.2.5
-            - Update default PAC rules
-            - Fix reverse forwarder + DNS IP preference
+            - Core: sudoku v0.3.0 (main)
+            - Adapt Android config JSON schema (httpmask nested)
+            - Support HTTPMask ws mode in UI + short links

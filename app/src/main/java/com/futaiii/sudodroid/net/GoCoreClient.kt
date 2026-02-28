@@ -155,6 +155,9 @@ object GoCoreClient {
         node: NodeConfig,
         globalProxySettings: GlobalProxySettings = GlobalProxySettings()
     ): String {
+        require(node.enablePureDownlink || node.aead != com.futaiii.sudodroid.data.AeadMode.NONE) {
+            "Bandwidth-optimized downlink requires AEAD (aes-128-gcm or chacha20-poly1305)"
+        }
         val resolved = ServerAddressResolver.resolve(node, globalProxySettings.ipMode)
         val serverAddress = resolved.serverAddress
         val ipMode = when (globalProxySettings.ipMode) {
@@ -190,6 +193,14 @@ object GoCoreClient {
             node.httpMaskMultiplex.wireValue
         }
         val httpMaskPathRoot = node.httpMaskPathRoot.trim()
+        val httpMask = GoHttpMaskConfig(
+            disable = node.disableHttpMask,
+            mode = node.httpMaskMode.wireValue,
+            tls = node.httpMaskTls,
+            host = httpMaskHost,
+            pathRoot = httpMaskPathRoot,
+            multiplex = httpMaskMultiplex
+        )
         val config = GoCoreConfig(
             localPort = node.localPort,
             serverAddress = serverAddress,
@@ -203,12 +214,7 @@ object GoCoreClient {
             customTable = primaryCustomTable.orEmpty(),
             customTables = customTables,
             enablePureDownlink = node.enablePureDownlink,
-            disableHttpMask = node.disableHttpMask,
-            httpMaskMode = node.httpMaskMode.wireValue,
-            httpMaskTls = node.httpMaskTls,
-            httpMaskHost = httpMaskHost,
-            httpMaskPathRoot = httpMaskPathRoot,
-            httpMaskMultiplex = httpMaskMultiplex,
+            httpMask = httpMask,
             proxyMode = proxyMode
         )
         return json.encodeToString(config)
@@ -231,13 +237,18 @@ object GoCoreClient {
         @SerialName("custom_table") val customTable: String = "",
         @SerialName("custom_tables") val customTables: List<String> = emptyList(),
         @SerialName("enable_pure_downlink") val enablePureDownlink: Boolean = true,
-        @SerialName("disable_http_mask") val disableHttpMask: Boolean = false,
-        @SerialName("http_mask_mode") val httpMaskMode: String,
-        @SerialName("http_mask_tls") val httpMaskTls: Boolean = false,
-        @SerialName("http_mask_host") val httpMaskHost: String = "",
-        @SerialName("path_root") val httpMaskPathRoot: String = "",
-        @SerialName("http_mask_multiplex") val httpMaskMultiplex: String = "off",
+        @SerialName("httpmask") val httpMask: GoHttpMaskConfig = GoHttpMaskConfig(),
         @SerialName("proxy_mode") val proxyMode: String
+    )
+
+    @Serializable
+    private data class GoHttpMaskConfig(
+        val disable: Boolean = false,
+        val mode: String = "legacy",
+        val tls: Boolean = false,
+        val host: String = "",
+        @SerialName("path_root") val pathRoot: String = "",
+        val multiplex: String = "off"
     )
 
     @Serializable

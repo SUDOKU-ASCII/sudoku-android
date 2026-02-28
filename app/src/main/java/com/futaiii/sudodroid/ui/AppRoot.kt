@@ -1463,6 +1463,10 @@ private fun buildNodeConfig(
         httpMaskMultiplex
     }
 
+    if (!enablePureDownlink && aeadMode == AeadMode.NONE) {
+        throw IllegalArgumentException("Bandwidth-optimized downlink requires AEAD (aes-128-gcm or chacha20-poly1305)")
+    }
+
     val customTables = NodeInputValidator.parseCustomTablePatterns(customTablesText)
     customTables.forEach { NodeInputValidator.requireValidCustomTablePattern(it) }
 

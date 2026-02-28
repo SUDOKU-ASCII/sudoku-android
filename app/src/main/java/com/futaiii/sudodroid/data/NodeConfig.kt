@@ -132,13 +132,15 @@ enum class HttpMaskMode(val wireValue: String, val label: String) {
     LEGACY("legacy", "Legacy"),
     AUTO("auto", "Auto"),
     STREAM("stream", "Stream"),
-    POLL("poll", "Poll");
+    POLL("poll", "Poll"),
+    WS("ws", "WebSocket");
 
     companion object {
         fun fromWire(raw: String?): HttpMaskMode = when (raw?.lowercase()) {
             "auto" -> AUTO
             "stream", "xhttp" -> STREAM
             "poll", "pht" -> POLL
+            "ws" -> WS
             else -> LEGACY
         }
     }
