@@ -45,10 +45,7 @@ jobs:
       - name: Install Android SDK / NDK
         uses: android-actions/setup-android@v3
         with:
-          packages: |
-            platform-tools
-            platforms;android-34
-            ndk;26.1.10909125
+          packages: platform-tools platforms;android-34 ndk;26.1.10909125
 
       - name: Ensure hev-socks5-tunnel present
         run: |
