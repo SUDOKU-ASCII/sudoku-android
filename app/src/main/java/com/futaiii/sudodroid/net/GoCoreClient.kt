@@ -2,7 +2,6 @@ package com.futaiii.sudodroid.net
 
 import android.util.Log
 import com.futaiii.sudodroid.data.GlobalProxySettings
-import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
@@ -187,7 +186,7 @@ object GoCoreClient {
         val httpMaskHost = node.httpMaskHost.trim().ifEmpty {
             if (!node.disableHttpMask) resolved.sniHost.orEmpty() else ""
         }
-        val httpMaskMultiplex = if (node.disableHttpMask || node.httpMaskMode == HttpMaskMode.LEGACY) {
+        val httpMaskMultiplex = if (node.disableHttpMask) {
             HttpMaskMultiplex.OFF.wireValue
         } else {
             node.httpMaskMultiplex.wireValue
@@ -244,7 +243,7 @@ object GoCoreClient {
     @Serializable
     private data class GoHttpMaskConfig(
         val disable: Boolean = false,
-        val mode: String = "legacy",
+        val mode: String = "auto",
         val tls: Boolean = false,
         val host: String = "",
         @SerialName("path_root") val pathRoot: String = "",

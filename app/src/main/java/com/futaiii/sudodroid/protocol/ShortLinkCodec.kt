@@ -66,7 +66,7 @@ object ShortLinkCodec {
         val httpMaskMode = HttpMaskMode.fromWire(payload.httpMaskMode)
         val httpMaskHost = payload.httpMaskHost?.trim().orEmpty()
         val httpMaskPathRoot = NodeInputValidator.normalizeHttpMaskPathRoot(payload.httpMaskPath)
-        val httpMaskMultiplex = if (payload.disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
+        val httpMaskMultiplex = if (payload.disableHttpMask) {
             HttpMaskMultiplex.OFF
         } else {
             HttpMaskMultiplex.fromWire(payload.httpMaskMux)
@@ -113,7 +113,7 @@ object ShortLinkCodec {
             customTable = primaryCustomTable,
             customTables = normalizedCustomTables.takeIf { it.isNotEmpty() } ?: emptyList(),
             disableHttpMask = node.disableHttpMask,
-            httpMaskMode = node.httpMaskMode.wireValue.takeUnless { node.httpMaskMode == HttpMaskMode.LEGACY },
+            httpMaskMode = node.httpMaskMode.wireValue,
             httpMaskTls = node.httpMaskTls,
             httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() },
             httpMaskPath = NodeInputValidator.normalizeHttpMaskPathRoot(node.httpMaskPathRoot).takeIf { it.isNotBlank() },

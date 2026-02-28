@@ -65,6 +65,6 @@ Artifacts live in `app/build/outputs/apk/<variant>/`.
 
 `.github/workflows/android.yml` contains the GitHub Actions recipe used locally:
 
-- Installs Temurin JDK 17, Go 1.24, Android cmdline-tools + platform packages, and NDK r26.1.
+- Installs Temurin JDK 17, Go 1.26, Android cmdline-tools + platform packages, and NDK r26.1.
 - Builds the `gomobile` AAR via `scripts/build_sudoku_aar.sh`.
 - Runs `./gradlew :app:assembleRelease` and uploads the resulting APK as an artifact.

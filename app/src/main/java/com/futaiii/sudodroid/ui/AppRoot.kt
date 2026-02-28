@@ -1056,7 +1056,7 @@ private fun NodeEditorDialog(
     }
     var aeadMode by rememberSaveable { mutableStateOf(initial?.aead ?: AeadMode.CHACHA20_POLY1305) }
     var disableHttpMask by rememberSaveable { mutableStateOf(initial?.disableHttpMask ?: false) }
-    var httpMaskMode by rememberSaveable { mutableStateOf(initial?.httpMaskMode ?: HttpMaskMode.LEGACY) }
+    var httpMaskMode by rememberSaveable { mutableStateOf(initial?.httpMaskMode ?: HttpMaskMode.AUTO) }
     var httpMaskTls by rememberSaveable { mutableStateOf(initial?.httpMaskTls ?: false) }
     var httpMaskHost by rememberSaveable { mutableStateOf(initial?.httpMaskHost.orEmpty()) }
     var httpMaskPathRoot by rememberSaveable { mutableStateOf(initial?.httpMaskPathRoot.orEmpty()) }
@@ -1258,8 +1258,8 @@ private fun NodeEditorDialog(
                     item {
                         SectionCard(title = "HTTP Mask") {
                             val httpMaskEnabled = !disableHttpMask
-                            LaunchedEffect(httpMaskEnabled, httpMaskMode) {
-                                if (!httpMaskEnabled || httpMaskMode == HttpMaskMode.LEGACY) {
+                            LaunchedEffect(httpMaskEnabled) {
+                                if (!httpMaskEnabled) {
                                     httpMaskMultiplex = HttpMaskMultiplex.OFF
                                 }
                             }
@@ -1274,7 +1274,7 @@ private fun NodeEditorDialog(
                                 Column {
                                     Text("HTTP mask")
                                     Text(
-                                        "Legacy header or HTTP tunnel wrapper.",
+                                        "HTTP tunnel wrapper (auto/stream/poll/ws).",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 12.sp
@@ -1291,12 +1291,12 @@ private fun NodeEditorDialog(
                                         enabled = httpMaskEnabled,
                                         shape = SegmentedButtonDefaults.itemShape(index, HttpMaskMode.entries.size),
                                         modifier = Modifier.height(40.dp),
-                                        label = { Text(mode.label) }
+                                        label = { Text(mode.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                     )
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
-                            val tunnelOptionsEnabled = httpMaskEnabled && httpMaskMode != HttpMaskMode.LEGACY
+                            val tunnelOptionsEnabled = httpMaskEnabled
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1457,7 +1457,7 @@ private fun buildNodeConfig(
     if (key.trim().isEmpty()) throw IllegalArgumentException("Key cannot be blank")
     val sanitizedHttpMaskHost = httpMaskHost.trim()
     val sanitizedHttpMaskPathRoot = NodeInputValidator.requireHttpMaskPathRoot(httpMaskPathRoot)
-    val sanitizedHttpMaskMultiplex = if (disableHttpMask || httpMaskMode == HttpMaskMode.LEGACY) {
+    val sanitizedHttpMaskMultiplex = if (disableHttpMask) {
         HttpMaskMultiplex.OFF
     } else {
         httpMaskMultiplex

@@ -48,8 +48,8 @@ else
     | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
 fi
 
-# Upstream may set a stricter Go patch version (e.g. go 1.24.7) than what's installed locally.
-# Relax to "go 1.24" to keep builds working across patch releases.
+# Upstream may set a stricter Go patch version (e.g. go 1.26.2) than what's installed locally.
+# Relax to "go 1.26" (major.minor only) to keep builds working across patch releases.
 echo "Normalizing upstream go.mod go version..."
 SUDOKU_DIR="${SUDOKU_DIR}" python3 - <<'PY'
 from __future__ import annotations

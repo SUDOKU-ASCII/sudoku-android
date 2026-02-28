@@ -35,7 +35,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.26"
 
       - name: Install gomobile
         run: |
@@ -368,4 +368,5 @@ jobs:
           body: |
             - Core: sudoku v0.3.0 (main)
             - Adapt Android config JSON schema (httpmask nested)
-            - Support HTTPMask ws mode in UI + short links
+            - HTTP mask: drop legacy mode; label WebSocket as "ws"
+            - CI: build Go core with Go 1.26

@@ -61,7 +61,7 @@ data class NodeConfig(
     @SerialName("disable_http_mask")
     val disableHttpMask: Boolean = false,
     @SerialName("http_mask_mode")
-    val httpMaskMode: HttpMaskMode = HttpMaskMode.LEGACY,
+    val httpMaskMode: HttpMaskMode = HttpMaskMode.AUTO,
     @SerialName("http_mask_tls")
     val httpMaskTls: Boolean = false,
     @SerialName("http_mask_host")
@@ -129,11 +129,10 @@ enum class IpMode(val label: String) {
 
 @Serializable(with = HttpMaskModeSerializer::class)
 enum class HttpMaskMode(val wireValue: String, val label: String) {
-    LEGACY("legacy", "Legacy"),
     AUTO("auto", "Auto"),
     STREAM("stream", "Stream"),
     POLL("poll", "Poll"),
-    WS("ws", "WebSocket");
+    WS("ws", "ws");
 
     companion object {
         fun fromWire(raw: String?): HttpMaskMode = when (raw?.lowercase()) {
@@ -141,7 +140,8 @@ enum class HttpMaskMode(val wireValue: String, val label: String) {
             "stream", "xhttp" -> STREAM
             "poll", "pht" -> POLL
             "ws" -> WS
-            else -> LEGACY
+            "legacy" -> AUTO
+            else -> AUTO
         }
     }
 }
