@@ -1,7 +1,7 @@
 # Sudodroid (Android client for sudoku)
 
 
-[![Latest Release](https://img.shields.io/github/v/release/saba-futai/sudoku-android?style=for-the-badge)](https://github.com/saba-futai/sudoku-android/releases)
+[![Latest Release](https://img.shields.io/github/v/release/SUDOKU-ASCII/sudoku-android?style=for-the-badge)](https://github.com/SUDOKU-ASCII/sudoku-android/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
 Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
