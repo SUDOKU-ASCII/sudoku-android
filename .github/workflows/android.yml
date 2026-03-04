@@ -366,7 +366,5 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Core: sudoku v0.3.0 (main)
-            - Adapt Android config JSON schema (httpmask nested)
-            - HTTP mask: drop legacy mode; label WebSocket as "ws"
-            - CI: build Go core with Go 1.26
+            - Default PAC rules now use fastly.jsdelivr mirror sources.
+            - Bump Android app release to v0.2.1.

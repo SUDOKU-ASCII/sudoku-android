@@ -9,7 +9,7 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.2.0"
+val computedVersionName: String = tagVersionName ?: "0.2.1"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
