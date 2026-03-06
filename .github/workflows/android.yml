@@ -366,6 +366,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Refresh v0.2.2 to fix the VPN startup regression introduced by the initial rollout.
-            - Keep secure Go-core hostname resolution when available, but fall back automatically if the secure resolver is unavailable or fails.
-            - Retain DoH-first lookup, FakeIP filtering, IPv4-first ordering, and the extracted mobile Go patch files under scripts/sudoku_patches.
+            - Upgrade the embedded Sudoku core build to upstream `v0.3.2`.
+            - Remove the Android-side IP version selector and let the core handle DNS and IPv4-only behavior directly.
+            - Drop the obsolete Android DNS patch stack and simplify the mobile AAR build overlays to only keep the Android entrypoints and traffic stats hooks.
