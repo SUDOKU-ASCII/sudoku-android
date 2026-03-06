@@ -3,6 +3,7 @@ package com.futaiii.sudodroid.net
 import android.util.Log
 import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
+import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
@@ -34,6 +35,12 @@ object GoCoreClient {
         )
         private val stopReverseForwarderMethod = mobileClass?.getMethod("stopReverseForwarder")
         private val reverseStatusMethod = mobileClass?.getMethod("getReverseForwardStatusJson")
+        private val resolveServerAddressMethod = mobileClass?.getMethod(
+            "resolveServerAddressJson",
+            String::class.java,
+            Integer.TYPE,
+            String::class.java
+        )
 
         fun start(configJson: String) {
             val method = startMethod ?: error("Sudoku core AAR missing; run scripts/build_sudoku_aar.sh to generate $MOBILE_CLASS")
@@ -96,6 +103,16 @@ object GoCoreClient {
                 null
             }
         }
+
+        fun resolveServerAddressJsonOrNull(host: String, port: Int, ipMode: String): String? {
+            val method = resolveServerAddressMethod ?: return null
+            return try {
+                method.invoke(null, host.trim(), port, ipMode.trim()) as? String
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to resolve server address via Go core", e)
+                throw e
+            }
+        }
     }
 
     private inline fun <T> withLifecycleLock(block: () -> T): T = synchronized(lifecycleLock) { block() }
@@ -150,6 +167,33 @@ object GoCoreClient {
             }
     }
 
+    fun resolveServerAddress(host: String, port: Int, ipMode: IpMode): ResolvedServerAddress? {
+        val raw = MobileBinding.resolveServerAddressJsonOrNull(host, port, ipMode.toWireValue()) ?: return null
+        val resolved = runCatching { json.decodeFromString<SecureResolvedServerAddressResult>(raw) }
+            .getOrElse {
+                Log.w(TAG, "Failed to decode resolved server address: $raw", it)
+                throw IllegalStateException("Secure DNS resolver returned invalid data", it)
+            }
+
+        val error = resolved.error.trim()
+        if (error.isNotEmpty()) {
+            throw IllegalStateException(error)
+        }
+
+        val resolvedHost = resolved.host.trim()
+        val serverAddress = resolved.serverAddress.trim()
+        require(resolvedHost.isNotEmpty() && serverAddress.isNotEmpty()) {
+            "Secure DNS resolver returned an empty address"
+        }
+
+        return ResolvedServerAddress(
+            host = resolvedHost,
+            port = resolved.port.takeIf { it > 0 } ?: port,
+            serverAddress = serverAddress,
+            sniHost = resolved.sniHost?.trim()?.takeIf { it.isNotEmpty() }
+        )
+    }
+
     fun buildConfigJson(
         node: NodeConfig,
         globalProxySettings: GlobalProxySettings = GlobalProxySettings()
@@ -159,11 +203,7 @@ object GoCoreClient {
         }
         val resolved = ServerAddressResolver.resolve(node, globalProxySettings.ipMode)
         val serverAddress = resolved.serverAddress
-        val ipMode = when (globalProxySettings.ipMode) {
-            com.futaiii.sudodroid.data.IpMode.DEFAULT -> "default"
-            com.futaiii.sudodroid.data.IpMode.IPV4_ONLY -> "ipv4_only"
-            com.futaiii.sudodroid.data.IpMode.IPV6_PREFERRED -> "ipv6_preferred"
-        }
+        val ipMode = globalProxySettings.ipMode.toWireValue()
         val proxyMode = globalProxySettings.proxyMode.wireValue
         val ruleUrls = if (globalProxySettings.proxyMode == ProxyMode.PAC) {
             globalProxySettings.ruleUrls.mapNotNull { url ->
@@ -266,4 +306,19 @@ object GoCoreClient {
         val insecure: Boolean = false,
         @SerialName("last_error") val lastError: String = ""
     )
+
+    @Serializable
+    private data class SecureResolvedServerAddressResult(
+        val host: String = "",
+        val port: Int = 0,
+        @SerialName("server_address") val serverAddress: String = "",
+        @SerialName("sni_host") val sniHost: String? = null,
+        val error: String = ""
+    )
+
+    private fun IpMode.toWireValue(): String = when (this) {
+        IpMode.DEFAULT -> "default"
+        IpMode.IPV4_ONLY -> "ipv4_only"
+        IpMode.IPV6_PREFERRED -> "ipv6_preferred"
+    }
 }

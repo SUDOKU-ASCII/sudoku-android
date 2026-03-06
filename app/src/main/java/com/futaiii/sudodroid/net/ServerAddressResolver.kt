@@ -13,6 +13,19 @@ data class ResolvedServerAddress(
     val sniHost: String?
 )
 
+internal fun interface SecureServerAddressProvider {
+    fun resolve(host: String, port: Int, ipMode: IpMode): ResolvedServerAddress?
+}
+
+internal val defaultSecureServerAddressProvider = SecureServerAddressProvider { host, port, ipMode ->
+    GoCoreClient.resolveServerAddress(host, port, ipMode)
+}
+
+internal object ServerAddressResolverRuntime {
+    @Volatile
+    var secureProvider: SecureServerAddressProvider = defaultSecureServerAddressProvider
+}
+
 object ServerAddressResolver {
     fun resolve(node: NodeConfig, ipMode: IpMode = node.ipMode): ResolvedServerAddress {
         val host = stripHost(node.host)
@@ -28,6 +41,12 @@ object ServerAddressResolver {
             )
         }
 
+        ServerAddressResolverRuntime.secureProvider.resolve(host, port, ipMode)?.let { secure ->
+            return secure
+        }
+
+        // Compatibility fallback for older sudoku.aar builds that do not expose
+        // the secure resolver entrypoint yet.
         val addresses = InetAddress.getAllByName(host).toList()
         val ipv4 = addresses.filterIsInstance<Inet4Address>()
         val ipv6 = addresses.filterIsInstance<Inet6Address>()
