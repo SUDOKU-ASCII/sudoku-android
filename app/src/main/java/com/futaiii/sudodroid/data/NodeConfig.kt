@@ -14,8 +14,7 @@ val DEFAULT_PAC_RULE_URLS: List<String> = listOf(
     "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/BiliBili/BiliBili.list",
     "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WeChat/WeChat.list",
     "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMaxNoIP/ChinaMaxNoIP.list",
-    "https://fastly.jsdelivr.net/gh/fernvenue/chn-cidr-list@master/ipv4.yaml",
-    "https://fastly.jsdelivr.net/gh/fernvenue/chn-cidr-list@master/ipv6.yaml"
+    "https://fastly.jsdelivr.net/gh/fernvenue/chn-cidr-list@master/ipv4.yaml"
 )
 
 @Serializable
@@ -23,9 +22,7 @@ data class GlobalProxySettings(
     @SerialName("proxy_mode")
     val proxyMode: ProxyMode = ProxyMode.PAC,
     @SerialName("rule_urls")
-    val ruleUrls: List<String> = DEFAULT_PAC_RULE_URLS,
-    @SerialName("ip_mode")
-    val ipMode: IpMode = IpMode.DEFAULT
+    val ruleUrls: List<String> = DEFAULT_PAC_RULE_URLS
 )
 
 @Serializable
@@ -56,8 +53,6 @@ data class NodeConfig(
     val localPort: Int = 1080,
     val proxyMode: ProxyMode = ProxyMode.PAC,
     val ruleUrls: List<String> = emptyList(),
-    @SerialName("ip_mode")
-    val ipMode: IpMode = IpMode.DEFAULT,
     @SerialName("disable_http_mask")
     val disableHttpMask: Boolean = false,
     @SerialName("http_mask_mode")
@@ -115,16 +110,6 @@ enum class ProxyMode(val wireValue: String, val label: String) {
     DIRECT("direct", "Direct"),
     @SerialName("pac")
     PAC("pac", "PAC");
-}
-
-@Serializable
-enum class IpMode(val label: String) {
-    @SerialName("default")
-    DEFAULT("Default (IPv4)"),
-    @SerialName("ipv4_only")
-    IPV4_ONLY("IPv4 only"),
-    @SerialName("ipv6_preferred")
-    IPV6_PREFERRED("IPv6 preferred");
 }
 
 @Serializable(with = HttpMaskModeSerializer::class)

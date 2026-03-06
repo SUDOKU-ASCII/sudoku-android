@@ -8,6 +8,7 @@ import (
 
 	"github.com/saba-futai/sudoku/internal/config"
 	"github.com/saba-futai/sudoku/internal/tunnel"
+	"github.com/saba-futai/sudoku/pkg/dnsutil"
 	"github.com/saba-futai/sudoku/pkg/geodata"
 	"github.com/saba-futai/sudoku/pkg/obfs/sudoku"
 )
@@ -59,6 +60,10 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 	} else {
 		dialer = &tunnel.StandardDialer{BaseDialer: baseDialer}
 	}
+	resolver, err := dnsutil.NewResolver(dnsutil.RecommendedClientOptions())
+	if err != nil {
+		return nil, fmt.Errorf("build DNS resolver: %w", err)
+	}
 
 	// 3. GeoIP/PAC
 	var geoMgr *geodata.Manager
@@ -103,7 +108,7 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 				log.Printf("Accepted connection from %s", conn.RemoteAddr())
 				// handleMixedConn takes a primary table for legacy helpers;
 				// the dialer itself performs per-connection table rotation.
-				handleMixedConn(conn, cfg, primaryTable, geoMgr, dialer)
+				handleMixedConn(conn, cfg, primaryTable, geoMgr, dialer, resolver)
 			}(c)
 		}
 	}()

@@ -3,7 +3,6 @@ package com.futaiii.sudodroid.net
 import android.util.Log
 import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
-import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
@@ -35,14 +34,6 @@ object GoCoreClient {
         )
         private val stopReverseForwarderMethod = mobileClass?.getMethod("stopReverseForwarder")
         private val reverseStatusMethod = mobileClass?.getMethod("getReverseForwardStatusJson")
-        private val resolveServerAddressMethod = runCatching {
-            mobileClass?.getMethod(
-                "resolveServerAddressJson",
-                String::class.java,
-                Integer.TYPE,
-                String::class.java
-            )
-        }.getOrNull()
 
         fun start(configJson: String) {
             val method = startMethod ?: error("Sudoku core AAR missing; run scripts/build_sudoku_aar.sh to generate $MOBILE_CLASS")
@@ -106,15 +97,6 @@ object GoCoreClient {
             }
         }
 
-        fun resolveServerAddressJsonOrNull(host: String, port: Int, ipMode: String): String? {
-            val method = resolveServerAddressMethod ?: return null
-            return try {
-                method.invoke(null, host.trim(), port, ipMode.trim()) as? String
-            } catch (e: Throwable) {
-                Log.w(TAG, "Failed to resolve server address via Go core", e)
-                null
-            }
-        }
     }
 
     private inline fun <T> withLifecycleLock(block: () -> T): T = synchronized(lifecycleLock) { block() }
@@ -169,35 +151,6 @@ object GoCoreClient {
             }
     }
 
-    fun resolveServerAddress(host: String, port: Int, ipMode: IpMode): ResolvedServerAddress? {
-        val raw = MobileBinding.resolveServerAddressJsonOrNull(host, port, ipMode.toWireValue()) ?: return null
-        val resolved = runCatching { json.decodeFromString<SecureResolvedServerAddressResult>(raw) }
-            .getOrElse {
-                Log.w(TAG, "Failed to decode resolved server address: $raw", it)
-                return null
-            }
-
-        val error = resolved.error.trim()
-        if (error.isNotEmpty()) {
-            Log.w(TAG, "Secure DNS resolver failed for $host:$port: $error")
-            return null
-        }
-
-        val resolvedHost = resolved.host.trim()
-        val serverAddress = resolved.serverAddress.trim()
-        if (resolvedHost.isEmpty() || serverAddress.isEmpty()) {
-            Log.w(TAG, "Secure DNS resolver returned an empty address for $host:$port")
-            return null
-        }
-
-        return ResolvedServerAddress(
-            host = resolvedHost,
-            port = resolved.port.takeIf { it > 0 } ?: port,
-            serverAddress = serverAddress,
-            sniHost = resolved.sniHost?.trim()?.takeIf { it.isNotEmpty() }
-        )
-    }
-
     fun buildConfigJson(
         node: NodeConfig,
         globalProxySettings: GlobalProxySettings = GlobalProxySettings()
@@ -205,9 +158,8 @@ object GoCoreClient {
         require(node.enablePureDownlink || node.aead != com.futaiii.sudodroid.data.AeadMode.NONE) {
             "Bandwidth-optimized downlink requires AEAD (aes-128-gcm or chacha20-poly1305)"
         }
-        val resolved = ServerAddressResolver.resolve(node, globalProxySettings.ipMode)
-        val serverAddress = resolved.serverAddress
-        val ipMode = globalProxySettings.ipMode.toWireValue()
+        val normalizedHost = normalizeHost(node.host)
+        val serverAddress = joinHostPort(normalizedHost, node.port)
         val proxyMode = globalProxySettings.proxyMode.wireValue
         val ruleUrls = if (globalProxySettings.proxyMode == ProxyMode.PAC) {
             globalProxySettings.ruleUrls.mapNotNull { url ->
@@ -228,7 +180,7 @@ object GoCoreClient {
         }
 
         val httpMaskHost = node.httpMaskHost.trim().ifEmpty {
-            if (!node.disableHttpMask) resolved.sniHost.orEmpty() else ""
+            if (!node.disableHttpMask && !isLiteralAddress(normalizedHost)) normalizedHost else ""
         }
         val httpMaskMultiplex = if (node.disableHttpMask) {
             HttpMaskMultiplex.OFF.wireValue
@@ -251,7 +203,6 @@ object GoCoreClient {
             aead = node.aead.wireName,
             paddingMin = node.paddingMin,
             paddingMax = node.paddingMax,
-            ipMode = ipMode,
             ruleUrls = ruleUrls,
             ascii = node.asciiMode.wireValue,
             customTable = primaryCustomTable.orEmpty(),
@@ -274,7 +225,6 @@ object GoCoreClient {
         @SerialName("suspicious_action") val suspiciousAction: String = "fallback",
         @SerialName("padding_min") val paddingMin: Int,
         @SerialName("padding_max") val paddingMax: Int,
-        @SerialName("ip_mode") val ipMode: String = "default",
         @SerialName("rule_urls") val ruleUrls: List<String> = emptyList(),
         val ascii: String,
         @SerialName("custom_table") val customTable: String = "",
@@ -311,18 +261,26 @@ object GoCoreClient {
         @SerialName("last_error") val lastError: String = ""
     )
 
-    @Serializable
-    private data class SecureResolvedServerAddressResult(
-        val host: String = "",
-        val port: Int = 0,
-        @SerialName("server_address") val serverAddress: String = "",
-        @SerialName("sni_host") val sniHost: String? = null,
-        val error: String = ""
-    )
+    private fun normalizeHost(host: String): String {
+        return host.trim().removeSurrounding("[", "]")
+    }
 
-    private fun IpMode.toWireValue(): String = when (this) {
-        IpMode.DEFAULT -> "default"
-        IpMode.IPV4_ONLY -> "ipv4_only"
-        IpMode.IPV6_PREFERRED -> "ipv6_preferred"
+    private fun joinHostPort(host: String, port: Int): String {
+        return if (host.contains(":")) {
+            "[$host]:$port"
+        } else {
+            "$host:$port"
+        }
+    }
+
+    private fun isLiteralAddress(host: String): Boolean {
+        if (host.contains(":")) {
+            return true
+        }
+        val parts = host.split(".")
+        return parts.size == 4 && parts.all { part ->
+            val value = part.toIntOrNull() ?: return false
+            value in 0..255 && part == value.toString()
+        }
     }
 }

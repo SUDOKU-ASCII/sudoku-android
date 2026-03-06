@@ -22,7 +22,6 @@ import (
 	"github.com/saba-futai/sudoku/internal/app"
 	"github.com/saba-futai/sudoku/internal/config"
 	"github.com/saba-futai/sudoku/internal/tunnel"
-	"github.com/saba-futai/sudoku/pkg/dnsutil"
 )
 
 const sudokuTCPSubprotocol = "sudoku-tcp-v1"
@@ -43,14 +42,6 @@ type reverseForwardInstance struct {
 	insecure   bool
 }
 
-type resolvedServerAddress struct {
-	Host          string `json:"host"`
-	Port          int    `json:"port"`
-	ServerAddress string `json:"server_address"`
-	SNIHost       string `json:"sni_host,omitempty"`
-	Error         string `json:"error,omitempty"`
-}
-
 var (
 	mu              sync.Mutex
 	instance        *app.MobileInstance
@@ -58,110 +49,6 @@ var (
 	reverseStatus   reverseForwardStatus
 	coreLocalPort   int32
 )
-
-func encodeResolvedServerAddress(result resolvedServerAddress) string {
-	b, err := json.Marshal(result)
-	if err != nil {
-		return "{\"error\":\"encode resolved server address failed\"}"
-	}
-	return string(b)
-}
-
-func normalizeIPMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "ipv4_only", "ipv4":
-		return "ipv4_only"
-	case "ipv6_preferred", "ipv6":
-		return "ipv6_preferred"
-	default:
-		return "default"
-	}
-}
-
-func orderIPsByMode(ips []net.IP, mode string) []net.IP {
-	if len(ips) == 0 {
-		return nil
-	}
-
-	mode = normalizeIPMode(mode)
-	v4 := make([]net.IP, 0, len(ips))
-	v6 := make([]net.IP, 0, len(ips))
-	for _, ip := range ips {
-		if ip == nil {
-			continue
-		}
-		if ip4 := ip.To4(); ip4 != nil {
-			v4 = append(v4, ip4)
-			continue
-		}
-		if ip16 := ip.To16(); ip16 != nil {
-			v6 = append(v6, ip16)
-		}
-	}
-
-	switch mode {
-	case "ipv4_only":
-		return v4
-	case "ipv6_preferred":
-		return append(v6, v4...)
-	default:
-		return append(v4, v6...)
-	}
-}
-
-func resolveHost(host string) string {
-	return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(host, "["), "]"))
-}
-
-func ResolveServerAddressJson(host string, port int, ipMode string) string {
-	host = resolveHost(host)
-	result := resolvedServerAddress{
-		Host: host,
-		Port: port,
-	}
-
-	if host == "" {
-		result.Error = "empty host"
-		return encodeResolvedServerAddress(result)
-	}
-	if port <= 0 || port > 65535 {
-		result.Error = fmt.Sprintf("invalid port: %d", port)
-		return encodeResolvedServerAddress(result)
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		ipText := ip.String()
-		result.Host = ipText
-		result.ServerAddress = net.JoinHostPort(ipText, strconv.Itoa(port))
-		return encodeResolvedServerAddress(result)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	ips, err := dnsutil.LookupIPsWithCache(ctx, host)
-	if err != nil {
-		result.Error = err.Error()
-		return encodeResolvedServerAddress(result)
-	}
-
-	ordered := orderIPsByMode(ips, ipMode)
-	if len(ordered) == 0 {
-		switch normalizeIPMode(ipMode) {
-		case "ipv4_only":
-			result.Error = fmt.Sprintf("No IPv4 address found for %s", host)
-		default:
-			result.Error = fmt.Sprintf("No IPv4/IPv6 address found for %s", host)
-		}
-		return encodeResolvedServerAddress(result)
-	}
-
-	selected := ordered[0].String()
-	result.Host = selected
-	result.SNIHost = host
-	result.ServerAddress = net.JoinHostPort(selected, strconv.Itoa(port))
-	return encodeResolvedServerAddress(result)
-}
 
 func dialSocks5(ctx context.Context, proxyAddr, targetAddr string) (net.Conn, error) {
 	proxyAddr = strings.TrimSpace(proxyAddr)

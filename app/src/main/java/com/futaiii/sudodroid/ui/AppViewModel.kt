@@ -6,14 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.futaiii.sudodroid.data.GlobalProxySettings
-import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
 import com.futaiii.sudodroid.data.ProxyMode
 import com.futaiii.sudodroid.data.ReverseForwarderSettings
 import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.net.GoCoreClient
-import com.futaiii.sudodroid.net.ServerAddressResolver
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.collections.immutable.ImmutableList
@@ -178,8 +176,7 @@ class AppViewModel(
                 socket.tcpNoDelay = true
                 // Connect to the server port. If using proxy, this tests Client -> Proxy -> Server.
                 // If direct, this tests Client -> Server.
-                val resolved = ServerAddressResolver.resolve(node, current.globalProxySettings.ipMode)
-                socket.connect(java.net.InetSocketAddress(resolved.host, resolved.port), 5_000)
+                socket.connect(java.net.InetSocketAddress(node.host.trim().removeSurrounding("[", "]"), node.port), 5_000)
                 socket.close()
                 kotlin.math.abs((System.nanoTime() - start) / 1_000_000L)
             }.getOrNull()
@@ -212,7 +209,6 @@ class AppViewModel(
 
     fun updateGlobalProxySettings(
         proxyMode: ProxyMode,
-        ipMode: IpMode,
         ruleUrlsText: String
     ) {
         viewModelScope.launch {
@@ -228,7 +224,6 @@ class AppViewModel(
             repo.saveGlobalProxySettings(
                 GlobalProxySettings(
                     proxyMode = proxyMode,
-                    ipMode = ipMode,
                     ruleUrls = finalRuleUrls
                 )
             )

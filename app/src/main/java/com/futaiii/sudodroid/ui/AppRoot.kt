@@ -106,7 +106,6 @@ import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.HttpMaskMode
 import com.futaiii.sudodroid.data.HttpMaskMultiplex
-import com.futaiii.sudodroid.data.IpMode
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeInputValidator
 import com.futaiii.sudodroid.data.ProxyMode
@@ -144,7 +143,6 @@ fun AppRoot(
     var reverseListenAddr by rememberSaveable { mutableStateOf("") }
     var reverseInsecure by rememberSaveable { mutableStateOf(false) }
     var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.PAC) }
-    var globalIpMode by rememberSaveable { mutableStateOf(IpMode.DEFAULT) }
     var globalRuleUrlsText by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
@@ -174,7 +172,6 @@ fun AppRoot(
 
     LaunchedEffect(state.globalProxySettings) {
         globalProxyMode = state.globalProxySettings.proxyMode
-        globalIpMode = state.globalProxySettings.ipMode
         globalRuleUrlsText = when {
             state.globalProxySettings.ruleUrls.isNotEmpty() -> state.globalProxySettings.ruleUrls.joinToString("\n")
             state.globalProxySettings.proxyMode == ProxyMode.PAC -> defaultPacRuleUrlsText
@@ -272,7 +269,6 @@ fun AppRoot(
 
                     GlobalSettingsCard(
                         proxyMode = globalProxyMode,
-                        ipMode = globalIpMode,
                         ruleUrls = globalRuleUrlsText,
                         onProxyModeChange = { mode ->
                             globalProxyMode = mode
@@ -280,14 +276,12 @@ fun AppRoot(
                                 globalRuleUrlsText = defaultPacRuleUrlsText
                             }
                         },
-                        onIpModeChange = { globalIpMode = it },
                         onRuleUrlsChange = { globalRuleUrlsText = it },
                         onSetDefaultPacRules = {
                             globalProxyMode = ProxyMode.PAC
                             globalRuleUrlsText = defaultPacRuleUrlsText
                             viewModel.updateGlobalProxySettings(
                                 proxyMode = ProxyMode.PAC,
-                                ipMode = globalIpMode,
                                 ruleUrlsText = defaultPacRuleUrlsText
                             )
                             scope.launch {
@@ -297,7 +291,6 @@ fun AppRoot(
                         onSave = {
                             viewModel.updateGlobalProxySettings(
                                 proxyMode = globalProxyMode,
-                                ipMode = globalIpMode,
                                 ruleUrlsText = globalRuleUrlsText
                             )
                             scope.launch {
@@ -574,10 +567,8 @@ private fun SudodroidTopBar(
 @Composable
 private fun GlobalSettingsCard(
     proxyMode: ProxyMode,
-    ipMode: IpMode,
     ruleUrls: String,
     onProxyModeChange: (ProxyMode) -> Unit,
-    onIpModeChange: (IpMode) -> Unit,
     onRuleUrlsChange: (String) -> Unit,
     onSetDefaultPacRules: () -> Unit,
     onSave: () -> Unit
@@ -597,29 +588,6 @@ private fun GlobalSettingsCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-
-            Text("IP version preference", style = MaterialTheme.typography.labelMedium)
-            SingleChoiceSegmentedButtonRow {
-                IpMode.entries.forEachIndexed { index, mode ->
-                    SegmentedButton(
-                        selected = ipMode == mode,
-                        onClick = { onIpModeChange(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index, IpMode.entries.size),
-                        modifier = Modifier.height(40.dp),
-                        label = {
-                            Text(
-                                when (mode) {
-                                    IpMode.DEFAULT -> "Default"
-                                    IpMode.IPV4_ONLY -> "IPv4"
-                                    IpMode.IPV6_PREFERRED -> "IPv6"
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    )
-                }
-            }
 
             Text("Routing mode", style = MaterialTheme.typography.labelMedium)
             SingleChoiceSegmentedButtonRow {
