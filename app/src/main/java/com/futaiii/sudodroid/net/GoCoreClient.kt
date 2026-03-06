@@ -35,12 +35,14 @@ object GoCoreClient {
         )
         private val stopReverseForwarderMethod = mobileClass?.getMethod("stopReverseForwarder")
         private val reverseStatusMethod = mobileClass?.getMethod("getReverseForwardStatusJson")
-        private val resolveServerAddressMethod = mobileClass?.getMethod(
-            "resolveServerAddressJson",
-            String::class.java,
-            Integer.TYPE,
-            String::class.java
-        )
+        private val resolveServerAddressMethod = runCatching {
+            mobileClass?.getMethod(
+                "resolveServerAddressJson",
+                String::class.java,
+                Integer.TYPE,
+                String::class.java
+            )
+        }.getOrNull()
 
         fun start(configJson: String) {
             val method = startMethod ?: error("Sudoku core AAR missing; run scripts/build_sudoku_aar.sh to generate $MOBILE_CLASS")
@@ -110,7 +112,7 @@ object GoCoreClient {
                 method.invoke(null, host.trim(), port, ipMode.trim()) as? String
             } catch (e: Throwable) {
                 Log.w(TAG, "Failed to resolve server address via Go core", e)
-                throw e
+                null
             }
         }
     }
@@ -172,18 +174,20 @@ object GoCoreClient {
         val resolved = runCatching { json.decodeFromString<SecureResolvedServerAddressResult>(raw) }
             .getOrElse {
                 Log.w(TAG, "Failed to decode resolved server address: $raw", it)
-                throw IllegalStateException("Secure DNS resolver returned invalid data", it)
+                return null
             }
 
         val error = resolved.error.trim()
         if (error.isNotEmpty()) {
-            throw IllegalStateException(error)
+            Log.w(TAG, "Secure DNS resolver failed for $host:$port: $error")
+            return null
         }
 
         val resolvedHost = resolved.host.trim()
         val serverAddress = resolved.serverAddress.trim()
-        require(resolvedHost.isNotEmpty() && serverAddress.isNotEmpty()) {
-            "Secure DNS resolver returned an empty address"
+        if (resolvedHost.isEmpty() || serverAddress.isEmpty()) {
+            Log.w(TAG, "Secure DNS resolver returned an empty address for $host:$port")
+            return null
         }
 
         return ResolvedServerAddress(

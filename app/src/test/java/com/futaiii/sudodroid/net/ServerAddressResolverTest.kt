@@ -59,4 +59,19 @@ class ServerAddressResolverTest {
         assertEquals("8.8.8.8:53", resolved.serverAddress)
         assertNull(resolved.sniHost)
     }
+
+    @Test
+    fun `resolver falls back when secure provider throws`() {
+        ServerAddressResolverRuntime.secureProvider = SecureServerAddressProvider { _, _, _ ->
+            error("boom")
+        }
+
+        val resolved = ServerAddressResolver.resolve(
+            NodeConfig(host = "localhost", port = 8080),
+            IpMode.DEFAULT
+        )
+
+        assertEquals(8080, resolved.port)
+        assertTrue(resolved.serverAddress.endsWith(":8080"))
+    }
 }

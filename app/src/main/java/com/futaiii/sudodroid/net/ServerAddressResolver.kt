@@ -41,7 +41,9 @@ object ServerAddressResolver {
             )
         }
 
-        ServerAddressResolverRuntime.secureProvider.resolve(host, port, ipMode)?.let { secure ->
+        runCatching {
+            ServerAddressResolverRuntime.secureProvider.resolve(host, port, ipMode)
+        }.getOrNull()?.let { secure ->
             return secure
         }
 

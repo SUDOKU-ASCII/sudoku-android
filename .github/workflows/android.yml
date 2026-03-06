@@ -366,7 +366,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Harden Android DNS handling to match the desktop client more closely.
-            - Route Go-core hostname lookups through DoH-first resolution with FakeIP filtering and IPv4-first ordering.
-            - Move injected mobile Go sources into scripts/sudoku_patches for easier maintenance.
-            - Bump Android app release to v0.2.2.
+            - Refresh v0.2.2 to fix the VPN startup regression introduced by the initial rollout.
+            - Keep secure Go-core hostname resolution when available, but fall back automatically if the secure resolver is unavailable or fails.
+            - Retain DoH-first lookup, FakeIP filtering, IPv4-first ordering, and the extracted mobile Go patch files under scripts/sudoku_patches.
