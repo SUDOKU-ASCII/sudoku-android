@@ -9,7 +9,7 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.2.3"
+val computedVersionName: String = tagVersionName ?: "0.2.4"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
@@ -204,6 +204,7 @@ val ensureHevDeps by tasks.registering {
 val ensureSudokuAar by tasks.registering {
     val aar = projectDir.resolve("libs/sudoku.aar")
     inputs.file(rootProject.file("scripts/build_sudoku_aar.sh"))
+    inputs.dir(rootProject.file("scripts/sudoku_patches"))
     inputs.property("sudokuRef", System.getenv("SUDOKU_REF") ?: "<default>")
     inputs.property("androidApiLevel", System.getenv("ANDROID_API_LEVEL") ?: "<default>")
     inputs.property("gomobileTargets", System.getenv("GOMOBILE_TARGETS") ?: "<default>")

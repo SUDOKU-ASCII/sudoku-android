@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: main
+          SUDOKU_REF: v0.3.3
         run: |
           bash scripts/build_sudoku_aar.sh
 
