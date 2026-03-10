@@ -366,6 +366,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Upgrade the embedded Sudoku core build to upstream `v0.3.2`.
-            - Remove the Android-side IP version selector and let the core handle DNS and IPv4-only behavior directly.
-            - Drop the obsolete Android DNS patch stack and simplify the mobile AAR build overlays to only keep the Android entrypoints and traffic stats hooks.
+            - Sync the embedded Sudoku core build to upstream `v0.3.3`.
+            - Refine the Android dark theme with a cleaner cold-tone palette and non-purple action buttons.
+            - Smooth the home screen background so the header and content area render as one continuous surface.

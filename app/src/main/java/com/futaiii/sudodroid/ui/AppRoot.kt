@@ -131,7 +131,8 @@ private val AppDialogShape = RoundedCornerShape(30.dp)
 private val AppBackgroundBrush = Brush.verticalGradient(
     colors = listOf(
         Color(0xFF162338),
-        Color(0xFF11192A),
+        Color(0xFF132036),
+        Color(0xFF0F1A2D),
         Color(0xFF0B1220)
     )
 )
@@ -584,7 +585,7 @@ private fun SudodroidTopBar(
             }
         },
         colors = TopAppBarDefaults.largeTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            containerColor = Color.Transparent,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             actionIconContentColor = MaterialTheme.colorScheme.onSurface
         )
