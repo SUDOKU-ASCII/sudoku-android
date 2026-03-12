@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.3.3
+          SUDOKU_REF: v0.3.5
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -366,6 +366,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Sync the embedded Sudoku core build to upstream `v0.3.3`.
+            - Sync the embedded Sudoku core build to upstream `v0.3.5`.
             - Refine the Android dark theme with a cleaner cold-tone palette and non-purple action buttons.
             - Smooth the home screen background so the header and content area render as one continuous surface.
