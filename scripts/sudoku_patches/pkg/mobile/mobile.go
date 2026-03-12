@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/saba-futai/sudoku/internal/app"
-	"github.com/saba-futai/sudoku/internal/config"
-	"github.com/saba-futai/sudoku/internal/tunnel"
+	"github.com/SUDOKU-ASCII/sudoku/internal/app"
+	"github.com/SUDOKU-ASCII/sudoku/internal/config"
+	"github.com/SUDOKU-ASCII/sudoku/internal/tunnel"
 )
 
 const sudokuTCPSubprotocol = "sudoku-tcp-v1"
