@@ -81,7 +81,22 @@ enum class AsciiMode(val wireValue: String, val description: String) {
     PREFER_ASCII("prefer_ascii", "Prefer ASCII"),
 
     @SerialName("prefer_entropy")
-    PREFER_ENTROPY("prefer_entropy", "Prefer low entropy");
+    PREFER_ENTROPY("prefer_entropy", "Prefer low entropy"),
+
+    @SerialName("up_ascii_down_entropy")
+    UP_ASCII_DOWN_ENTROPY("up_ascii_down_entropy", "Uplink ASCII, downlink entropy"),
+
+    @SerialName("up_entropy_down_ascii")
+    UP_ENTROPY_DOWN_ASCII("up_entropy_down_ascii", "Uplink entropy, downlink ASCII");
+
+    companion object {
+        fun fromWire(raw: String?): AsciiMode = when (raw?.trim()?.lowercase()) {
+            "ascii", "prefer_ascii" -> PREFER_ASCII
+            "up_ascii_down_entropy" -> UP_ASCII_DOWN_ENTROPY
+            "up_entropy_down_ascii" -> UP_ENTROPY_DOWN_ASCII
+            else -> PREFER_ENTROPY
+        }
+    }
 }
 
 @Serializable

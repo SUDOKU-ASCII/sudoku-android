@@ -152,14 +152,13 @@ private fun encodeAscii(mode: AsciiMode): String {
     return when (mode) {
         AsciiMode.PREFER_ASCII -> "ascii"
         AsciiMode.PREFER_ENTROPY -> "entropy"
+        AsciiMode.UP_ASCII_DOWN_ENTROPY -> AsciiMode.UP_ASCII_DOWN_ENTROPY.wireValue
+        AsciiMode.UP_ENTROPY_DOWN_ASCII -> AsciiMode.UP_ENTROPY_DOWN_ASCII.wireValue
     }
 }
 
 private fun decodeAscii(raw: String?): AsciiMode {
-    return when (raw?.lowercase()) {
-        "ascii", "prefer_ascii" -> AsciiMode.PREFER_ASCII
-        else -> AsciiMode.PREFER_ENTROPY
-    }
+    return AsciiMode.fromWire(raw)
 }
 
 private fun decodeBase64Flexible(encoded: String): ByteArray {

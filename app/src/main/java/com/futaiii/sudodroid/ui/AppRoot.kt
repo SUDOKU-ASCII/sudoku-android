@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -135,6 +136,10 @@ private val AppBackgroundBrush = Brush.verticalGradient(
         Color(0xFF0F1A2D),
         Color(0xFF0B1220)
     )
+)
+private val asciiPreferenceRows = listOf(
+    listOf(AsciiMode.PREFER_ASCII, AsciiMode.PREFER_ENTROPY),
+    listOf(AsciiMode.UP_ASCII_DOWN_ENTROPY, AsciiMode.UP_ENTROPY_DOWN_ASCII)
 )
 
 @Composable
@@ -1195,27 +1200,35 @@ private fun NodeEditorDialog(
                     item {
                         SectionCard(title = "Behavior") {
                             Text("ASCII preference", style = MaterialTheme.typography.labelMedium)
-                            SingleChoiceSegmentedButtonRow {
-                                AsciiMode.entries.forEachIndexed { index: Int, mode: AsciiMode ->
-                                    val label = when (mode) {
-                                        AsciiMode.PREFER_ASCII -> "ASCII"
-                                        AsciiMode.PREFER_ENTROPY -> "Entropy"
-                                    }
-                                    SegmentedButton(
-                                        selected = asciiMode == mode,
-                                        onClick = { asciiMode = mode },
-                                        shape = SegmentedButtonDefaults.itemShape(index, AsciiMode.entries.size),
-                                        modifier = Modifier.height(40.dp),
-                                        label = {
-                                            Text(
-                                                label,
-                                                textAlign = TextAlign.Center,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth()
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                asciiPreferenceRows.forEach { rowModes ->
+                                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                        rowModes.forEachIndexed { index: Int, mode: AsciiMode ->
+                                            val label = when (mode) {
+                                                AsciiMode.PREFER_ASCII -> "ASCII"
+                                                AsciiMode.PREFER_ENTROPY -> "Entropy"
+                                                AsciiMode.UP_ASCII_DOWN_ENTROPY -> "upASCII"
+                                                AsciiMode.UP_ENTROPY_DOWN_ASCII -> "upEntropy"
+                                            }
+                                            SegmentedButton(
+                                                selected = asciiMode == mode,
+                                                onClick = { asciiMode = mode },
+                                                shape = SegmentedButtonDefaults.itemShape(index, rowModes.size),
+                                                modifier = Modifier
+                                                    .height(40.dp)
+                                                    .weight(1f),
+                                                label = {
+                                                    Text(
+                                                        label,
+                                                        textAlign = TextAlign.Center,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                }
                                             )
                                         }
-                                    )
+                                    }
                                 }
                             }
                             Spacer(Modifier.height(12.dp))

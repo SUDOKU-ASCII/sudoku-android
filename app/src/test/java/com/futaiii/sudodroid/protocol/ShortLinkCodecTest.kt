@@ -1,5 +1,6 @@
 package com.futaiii.sudodroid.protocol
 
+import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.NodeConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -66,6 +67,42 @@ class ShortLinkCodecTest {
             ShortLinkCodec.fromLink(link)
         }
         assertTrue(error.message?.contains("Custom table") == true)
+    }
+
+    @Test
+    fun fromLink_supportsDirectionalAsciiModes() {
+        val uplinkAscii = """{"h":"example.com","p":443,"k":"k","a":"up_ascii_down_entropy"}"""
+        val downlinkAscii = """{"h":"example.com","p":443,"k":"k","a":"up_entropy_down_ascii"}"""
+
+        assertEquals(
+            AsciiMode.UP_ASCII_DOWN_ENTROPY,
+            ShortLinkCodec.fromLink("sudoku://${uplinkAscii.toBase64Url()}").asciiMode
+        )
+        assertEquals(
+            AsciiMode.UP_ENTROPY_DOWN_ASCII,
+            ShortLinkCodec.fromLink("sudoku://${downlinkAscii.toBase64Url()}").asciiMode
+        )
+    }
+
+    @Test
+    fun toLink_preservesDirectionalAsciiModes() {
+        val modes = listOf(
+            AsciiMode.UP_ASCII_DOWN_ENTROPY,
+            AsciiMode.UP_ENTROPY_DOWN_ASCII
+        )
+
+        modes.forEach { mode ->
+            val node = NodeConfig(
+                host = "example.com",
+                port = 443,
+                key = "test-key",
+                asciiMode = mode
+            )
+
+            val decoded = ShortLinkCodec.fromLink(ShortLinkCodec.toLink(node))
+
+            assertEquals(mode, decoded.asciiMode)
+        }
     }
 }
 
