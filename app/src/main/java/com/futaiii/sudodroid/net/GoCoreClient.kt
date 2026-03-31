@@ -155,9 +155,6 @@ object GoCoreClient {
         node: NodeConfig,
         globalProxySettings: GlobalProxySettings = GlobalProxySettings()
     ): String {
-        require(node.enablePureDownlink || node.aead != com.futaiii.sudodroid.data.AeadMode.NONE) {
-            "Bandwidth-optimized downlink requires AEAD (aes-128-gcm or chacha20-poly1305)"
-        }
         val normalizedHost = normalizeHost(node.host)
         val serverAddress = joinHostPort(normalizedHost, node.port)
         val proxyMode = globalProxySettings.proxyMode.wireValue

@@ -1,5 +1,6 @@
 package com.futaiii.sudodroid.protocol
 
+import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.NodeConfig
 import org.junit.Assert.assertEquals
@@ -82,6 +83,16 @@ class ShortLinkCodecTest {
             AsciiMode.UP_ENTROPY_DOWN_ASCII,
             ShortLinkCodec.fromLink("sudoku://${downlinkAscii.toBase64Url()}").asciiMode
         )
+    }
+
+    @Test
+    fun fromLink_allowsPackedDownlinkWithoutAead() {
+        val payload = """{"h":"example.com","p":443,"k":"k","e":"none","x":true}"""
+
+        val decoded = ShortLinkCodec.fromLink("sudoku://${payload.toBase64Url()}")
+
+        assertEquals(AeadMode.NONE, decoded.aead)
+        assertEquals(false, decoded.enablePureDownlink)
     }
 
     @Test

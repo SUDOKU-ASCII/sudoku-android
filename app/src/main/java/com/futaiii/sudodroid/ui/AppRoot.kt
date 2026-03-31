@@ -1395,7 +1395,7 @@ private fun NodeEditorDialog(
                                 Column {
                                     Text("Bandwidth-optimized downlink")
                                     Text(
-                                        "Uses packed downlink; requires AEAD.",
+                                        "Uses packed downlink.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 12.sp
@@ -1493,10 +1493,6 @@ private fun buildNodeConfig(
         HttpMaskMultiplex.OFF
     } else {
         httpMaskMultiplex
-    }
-
-    if (!enablePureDownlink && aeadMode == AeadMode.NONE) {
-        throw IllegalArgumentException("Bandwidth-optimized downlink requires AEAD (aes-128-gcm or chacha20-poly1305)")
     }
 
     val customTables = NodeInputValidator.parseCustomTablePatterns(customTablesText)

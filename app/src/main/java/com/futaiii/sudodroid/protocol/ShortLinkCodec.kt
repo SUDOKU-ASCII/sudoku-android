@@ -36,7 +36,7 @@ object ShortLinkCodec {
         }
 
         val ascii = decodeAscii(payload.ascii)
-        var aead = when (payload.aead?.lowercase()) {
+        val aead = when (payload.aead?.lowercase()) {
             null, "" -> AeadMode.NONE
             else -> AeadMode.fromWire(payload.aead)
         }
@@ -46,9 +46,6 @@ object ShortLinkCodec {
                 ?: throw IllegalArgumentException("short link has invalid local proxy port")
         }
         val enablePureDownlink = payload.packedDownlink?.let { !it } ?: true
-        if (!enablePureDownlink && aead == AeadMode.NONE) {
-            aead = AeadMode.CHACHA20_POLY1305
-        }
         val primaryCustomTable = payload.customTable?.trim().orEmpty().lowercase()
         if (primaryCustomTable.isNotEmpty()) {
             NodeInputValidator.requireValidCustomTablePattern(primaryCustomTable)
