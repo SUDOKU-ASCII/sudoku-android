@@ -122,7 +122,7 @@ jobs:
         if: steps.unit_tests.outputs.exit_code != '0'
         run: |
           set -euo pipefail
-          err_line="$(grep -E "e: file:|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/unit-tests.log | head -n 1 || true)"
+          err_line="$(grep -E "^e: | error: |Unresolved reference|No value passed|Type mismatch|Too many arguments|None of the following functions|Cannot access|Expecting|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/unit-tests.log | head -n 1 || true)"
           if [ -z "$err_line" ]; then
             err_line="$(tail -n 1 /tmp/unit-tests.log)"
           fi
@@ -182,7 +182,7 @@ jobs:
         if: steps.build_apk.outputs.exit_code != '0'
         run: |
           set -euo pipefail
-          err_line="$(grep -E "e: file:|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/build-apk.log | head -n 1 || true)"
+          err_line="$(grep -E "^e: | error: |Unresolved reference|No value passed|Type mismatch|Too many arguments|None of the following functions|Cannot access|Expecting|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/build-apk.log | head -n 1 || true)"
           if [ -z "$err_line" ]; then
             err_line="$(tail -n 1 /tmp/build-apk.log)"
           fi
