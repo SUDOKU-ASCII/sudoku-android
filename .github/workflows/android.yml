@@ -124,7 +124,7 @@ jobs:
           set -euo pipefail
           err_line="$(grep -E "^e: | error: |Unresolved reference|No value passed|Type mismatch|Too many arguments|None of the following functions|Cannot access|Expecting|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/unit-tests.log | head -n 1 || true)"
           if [ -z "$err_line" ]; then
-            err_line="$(tail -n 1 /tmp/unit-tests.log)"
+            err_line="$(tail -n 40 /tmp/unit-tests.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-1200)"
           fi
           echo "::error title=Run unit tests failed::$err_line"
           {
@@ -184,7 +184,7 @@ jobs:
           set -euo pipefail
           err_line="$(grep -E "^e: | error: |Unresolved reference|No value passed|Type mismatch|Too many arguments|None of the following functions|Cannot access|Expecting|Execution failed for task|FAILURE: Build failed|> Task .* FAILED|Caused by:" /tmp/build-apk.log | head -n 1 || true)"
           if [ -z "$err_line" ]; then
-            err_line="$(tail -n 1 /tmp/build-apk.log)"
+            err_line="$(tail -n 40 /tmp/build-apk.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-1200)"
           fi
           echo "::error title=Build APK failed::$err_line"
           {
