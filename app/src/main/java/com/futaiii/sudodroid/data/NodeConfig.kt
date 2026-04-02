@@ -110,11 +110,16 @@ enum class AsciiMode(val wireValue: String, val description: String) {
             uplink: AsciiPreference,
             downlink: AsciiPreference
         ): AsciiMode {
-            return when (uplink to downlink) {
-                AsciiPreference.ASCII to AsciiPreference.ASCII -> PREFER_ASCII
-                AsciiPreference.ASCII to AsciiPreference.ENTROPY -> UP_ASCII_DOWN_ENTROPY
-                AsciiPreference.ENTROPY to AsciiPreference.ASCII -> UP_ENTROPY_DOWN_ASCII
-                AsciiPreference.ENTROPY to AsciiPreference.ENTROPY -> PREFER_ENTROPY
+            return when (uplink) {
+                AsciiPreference.ASCII -> when (downlink) {
+                    AsciiPreference.ASCII -> PREFER_ASCII
+                    AsciiPreference.ENTROPY -> UP_ASCII_DOWN_ENTROPY
+                }
+
+                AsciiPreference.ENTROPY -> when (downlink) {
+                    AsciiPreference.ASCII -> UP_ENTROPY_DOWN_ASCII
+                    AsciiPreference.ENTROPY -> PREFER_ENTROPY
+                }
             }
         }
     }
