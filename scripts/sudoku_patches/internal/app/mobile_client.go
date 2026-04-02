@@ -9,7 +9,6 @@ import (
 	"github.com/SUDOKU-ASCII/sudoku/internal/config"
 	"github.com/SUDOKU-ASCII/sudoku/internal/tunnel"
 	"github.com/SUDOKU-ASCII/sudoku/pkg/dnsutil"
-	"github.com/SUDOKU-ASCII/sudoku/pkg/geodata"
 	"github.com/SUDOKU-ASCII/sudoku/pkg/obfs/sudoku"
 )
 
@@ -65,11 +64,8 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 		return nil, fmt.Errorf("build DNS resolver: %w", err)
 	}
 
-	// 3. GeoIP/PAC
-	var geoMgr *geodata.Manager
-	if cfg.ProxyMode == "pac" {
-		geoMgr = geodata.GetInstance(cfg.RuleURLs)
-	}
+	// 3. Routing / PAC managers
+	routeMgrs := buildRouteManagers(cfg)
 
 	// 4. Listen
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.LocalPort))
@@ -108,7 +104,7 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 				log.Printf("Accepted connection from %s", conn.RemoteAddr())
 				// handleMixedConn takes a primary table for legacy helpers;
 				// the dialer itself performs per-connection table rotation.
-				handleMixedConn(conn, cfg, primaryTable, geoMgr, dialer, resolver)
+				handleMixedConn(conn, cfg, primaryTable, routeMgrs, dialer, resolver)
 			}(c)
 		}
 	}()
