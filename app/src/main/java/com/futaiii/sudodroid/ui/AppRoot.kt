@@ -105,6 +105,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.futaiii.sudodroid.data.AeadMode
+import com.futaiii.sudodroid.data.AsciiPreference
 import com.futaiii.sudodroid.data.AsciiMode
 import com.futaiii.sudodroid.data.DEFAULT_PAC_RULE_URLS
 import com.futaiii.sudodroid.data.GlobalProxySettings
@@ -113,6 +114,8 @@ import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeInputValidator
 import com.futaiii.sudodroid.data.ProxyMode
+import com.futaiii.sudodroid.data.downlinkPreference
+import com.futaiii.sudodroid.data.uplinkPreference
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
 import kotlinx.collections.immutable.ImmutableList
@@ -135,10 +138,6 @@ private val AppBackgroundBrush = Brush.verticalGradient(
         Color(0xFF0F1A2D),
         Color(0xFF0B1220)
     )
-)
-private val asciiPreferenceRows = listOf(
-    listOf(AsciiMode.PREFER_ASCII, AsciiMode.PREFER_ENTROPY),
-    listOf(AsciiMode.UP_ASCII_DOWN_ENTROPY, AsciiMode.UP_ENTROPY_DOWN_ASCII)
 )
 
 @Composable
@@ -1070,7 +1069,9 @@ private fun NodeEditorDialog(
     var localPort by rememberSaveable { mutableStateOf((initial?.localPort ?: 1080).toString()) }
     var paddingMin by rememberSaveable { mutableStateOf((initial?.paddingMin ?: 5).toString()) }
     var paddingMax by rememberSaveable { mutableStateOf((initial?.paddingMax ?: 15).toString()) }
-    var asciiMode by rememberSaveable { mutableStateOf(initial?.asciiMode ?: AsciiMode.PREFER_ENTROPY) }
+    val initialAsciiMode = initial?.asciiMode ?: AsciiMode.PREFER_ENTROPY
+    var uplinkAsciiPreference by rememberSaveable { mutableStateOf(initialAsciiMode.uplinkPreference()) }
+    var downlinkAsciiPreference by rememberSaveable { mutableStateOf(initialAsciiMode.downlinkPreference()) }
     var customTablesText by rememberSaveable {
         mutableStateOf(
             initial?.customTables?.takeIf { it.isNotEmpty() }?.joinToString("\n")
@@ -1198,38 +1199,17 @@ private fun NodeEditorDialog(
                     }
                     item {
                         SectionCard(title = "Behavior") {
-                            Text("ASCII preference", style = MaterialTheme.typography.labelMedium)
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                asciiPreferenceRows.forEach { rowModes ->
-                                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                        rowModes.forEachIndexed { index: Int, mode: AsciiMode ->
-                                            val label = when (mode) {
-                                                AsciiMode.PREFER_ASCII -> "ASCII"
-                                                AsciiMode.PREFER_ENTROPY -> "Entropy"
-                                                AsciiMode.UP_ASCII_DOWN_ENTROPY -> "upASCII"
-                                                AsciiMode.UP_ENTROPY_DOWN_ASCII -> "upEntropy"
-                                            }
-                                            SegmentedButton(
-                                                selected = asciiMode == mode,
-                                                onClick = { asciiMode = mode },
-                                                shape = SegmentedButtonDefaults.itemShape(index, rowModes.size),
-                                                modifier = Modifier
-                                                    .height(40.dp)
-                                                    .weight(1f),
-                                                label = {
-                                                    Text(
-                                                        label,
-                                                        textAlign = TextAlign.Center,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            Text("Uplink style", style = MaterialTheme.typography.labelMedium)
+                            AsciiPreferenceSelector(
+                                selected = uplinkAsciiPreference,
+                                onSelected = { uplinkAsciiPreference = it }
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text("Downlink style", style = MaterialTheme.typography.labelMedium)
+                            AsciiPreferenceSelector(
+                                selected = downlinkAsciiPreference,
+                                onSelected = { downlinkAsciiPreference = it }
+                            )
                             Spacer(Modifier.height(12.dp))
                             Text("AEAD mode", style = MaterialTheme.typography.labelMedium)
                             SingleChoiceSegmentedButtonRow {
@@ -1430,7 +1410,10 @@ private fun NodeEditorDialog(
                                     localPort = localPort,
                                     paddingMin = paddingMin,
                                     paddingMax = paddingMax,
-                                    asciiMode = asciiMode,
+                                    asciiMode = AsciiMode.fromPreferences(
+                                        uplink = uplinkAsciiPreference,
+                                        downlink = downlinkAsciiPreference
+                                    ),
                                     aeadMode = aeadMode,
                                     disableHttpMask = disableHttpMask,
                                     httpMaskMode = httpMaskMode,
@@ -1452,6 +1435,34 @@ private fun NodeEditorDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AsciiPreferenceSelector(
+    selected: AsciiPreference,
+    onSelected: (AsciiPreference) -> Unit
+) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        AsciiPreference.entries.forEachIndexed { index, preference ->
+            SegmentedButton(
+                selected = selected == preference,
+                onClick = { onSelected(preference) },
+                shape = SegmentedButtonDefaults.itemShape(index, AsciiPreference.entries.size),
+                modifier = Modifier
+                    .height(40.dp)
+                    .weight(1f),
+                label = {
+                    Text(
+                        preference.label,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            )
         }
     }
 }

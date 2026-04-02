@@ -11,10 +11,10 @@ import kotlinx.serialization.encoding.Encoder
 import java.util.UUID
 
 val DEFAULT_PAC_RULE_URLS: List<String> = listOf(
-    "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/BiliBili/BiliBili.list",
-    "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/WeChat/WeChat.list",
     "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMaxNoIP/ChinaMaxNoIP.list",
-    "https://fastly.jsdelivr.net/gh/fernvenue/chn-cidr-list@master/ipv4.yaml"
+    "https://fastly.jsdelivr.net/gh/fernvenue/chn-cidr-list@master/ipv4.yaml",
+    "https://fastly.jsdelivr.net/gh/fernvenue/chn-cidr-list@master/ipv6.yaml",
+    "!https://gcore.jsdelivr.net/gh/TG-Twilight/AWAvenue-Ads-Rule@main/Filters/AWAvenue-Ads-Rule-Clash.yaml"
 )
 
 @Serializable
@@ -76,18 +76,27 @@ data class NodeConfig(
 )
 
 @Serializable
+enum class AsciiPreference(val wireToken: String, val label: String) {
+    @SerialName("ascii")
+    ASCII("ascii", "ASCII"),
+
+    @SerialName("entropy")
+    ENTROPY("entropy", "Entropy");
+}
+
+@Serializable
 enum class AsciiMode(val wireValue: String, val description: String) {
     @SerialName("prefer_ascii")
-    PREFER_ASCII("prefer_ascii", "Prefer ASCII"),
+    PREFER_ASCII("prefer_ascii", "Up ASCII / Down ASCII"),
 
     @SerialName("prefer_entropy")
-    PREFER_ENTROPY("prefer_entropy", "Prefer low entropy"),
+    PREFER_ENTROPY("prefer_entropy", "Up entropy / Down entropy"),
 
     @SerialName("up_ascii_down_entropy")
-    UP_ASCII_DOWN_ENTROPY("up_ascii_down_entropy", "Uplink ASCII, downlink entropy"),
+    UP_ASCII_DOWN_ENTROPY("up_ascii_down_entropy", "Up ASCII / Down entropy"),
 
     @SerialName("up_entropy_down_ascii")
-    UP_ENTROPY_DOWN_ASCII("up_entropy_down_ascii", "Uplink entropy, downlink ASCII");
+    UP_ENTROPY_DOWN_ASCII("up_entropy_down_ascii", "Up entropy / Down ASCII");
 
     companion object {
         fun fromWire(raw: String?): AsciiMode = when (raw?.trim()?.lowercase()) {
@@ -96,6 +105,38 @@ enum class AsciiMode(val wireValue: String, val description: String) {
             "up_entropy_down_ascii" -> UP_ENTROPY_DOWN_ASCII
             else -> PREFER_ENTROPY
         }
+
+        fun fromPreferences(
+            uplink: AsciiPreference,
+            downlink: AsciiPreference
+        ): AsciiMode {
+            return when (uplink to downlink) {
+                AsciiPreference.ASCII to AsciiPreference.ASCII -> PREFER_ASCII
+                AsciiPreference.ASCII to AsciiPreference.ENTROPY -> UP_ASCII_DOWN_ENTROPY
+                AsciiPreference.ENTROPY to AsciiPreference.ASCII -> UP_ENTROPY_DOWN_ASCII
+                AsciiPreference.ENTROPY to AsciiPreference.ENTROPY -> PREFER_ENTROPY
+            }
+        }
+    }
+}
+
+fun AsciiMode.uplinkPreference(): AsciiPreference {
+    return when (this) {
+        AsciiMode.PREFER_ASCII,
+        AsciiMode.UP_ASCII_DOWN_ENTROPY -> AsciiPreference.ASCII
+
+        AsciiMode.PREFER_ENTROPY,
+        AsciiMode.UP_ENTROPY_DOWN_ASCII -> AsciiPreference.ENTROPY
+    }
+}
+
+fun AsciiMode.downlinkPreference(): AsciiPreference {
+    return when (this) {
+        AsciiMode.PREFER_ASCII,
+        AsciiMode.UP_ENTROPY_DOWN_ASCII -> AsciiPreference.ASCII
+
+        AsciiMode.PREFER_ENTROPY,
+        AsciiMode.UP_ASCII_DOWN_ENTROPY -> AsciiPreference.ENTROPY
     }
 }
 

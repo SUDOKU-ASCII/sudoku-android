@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.0
+          SUDOKU_REF: v0.4.1
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -366,6 +366,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Sync the embedded Sudoku core build to upstream `v0.4.0`.
-            - Add GUI support for the new ASCII preferences: `upASCII` and `upEntropy`.
-            - Keep the four ASCII preference options mutually exclusive in a 2x2 selector.
+            - Sync the embedded Sudoku core build to upstream `v0.4.1`.
+            - Update default PAC rules to match the new core defaults, including the `!`-prefixed ad reject list.
+            - Split ASCII preference into explicit uplink and downlink selectors while preserving the canonical wire mapping.

@@ -7,7 +7,7 @@
 Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
 - Full node editor with validation, per-node transport tuning (padding / HTTP mask / custom tables), and a toggle for packed (bandwidth-optimized) downlink.
-- Global network settings card (shared by all nodes): routing mode (Global/Direct/PAC) and PAC rule URLs.
+- Global network settings card (shared by all nodes): routing mode (Global/Direct/PAC) and PAC rule URLs, including the default `!`-prefixed ad reject list used by sudoku v0.4.1.
 - Proxy-only mode (no VPN required): starts Sudoku core and local mixed proxy directly for app-level proxy use cases.
 - Reverse TCP-over-WebSocket local forwarder UI (no VPN needed), equivalent to `./sudoku -rev-dial ... -rev-listen ...` for local SSH/RDP style hops.
 - Quick Settings tile to start/stop the VPN, plus notification traffic stats split by DIRECT vs PROXY.
@@ -51,7 +51,7 @@ git submodule update --init --recursive   # or git clone https://github.com/heih
 During `preBuild`, Gradle will:
 
 1. Ensure `third_party/hev-socks5-tunnel` (and its submodules) are present.
-2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: `v0.4.0`), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
+2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: `v0.4.1`), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
 
 Artifacts live in `app/build/outputs/apk/<variant>/`.
 
