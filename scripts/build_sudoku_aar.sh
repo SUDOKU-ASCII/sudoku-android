@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the upstream v0.4.1 bugfix commit.
-SUDOKU_REF="${SUDOKU_REF:-ea60a29ac47baae32cbcffff644085fc56a35b84}"
+# Default to the upstream v0.4.1 tag.
+SUDOKU_REF="${SUDOKU_REF:-v0.4.1}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -39,12 +39,7 @@ mkdir -p "${WORK_DIR}"
 # Fetch sudoku
 echo "Fetching sudoku (${SUDOKU_REF})..."
 if command -v git >/dev/null 2>&1; then
-  if [[ "${SUDOKU_REF}" =~ ^[0-9a-f]{7,40}$ ]]; then
-    echo "Detected commit hash; downloading tarball snapshot..."
-    mkdir -p "${SUDOKU_DIR}"
-    curl -fsSL "https://codeload.github.com/SUDOKU-ASCII/sudoku/tar.gz/${SUDOKU_REF}" \
-      | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
-  elif ! git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"; then
+  if ! git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"; then
     echo "git clone failed; falling back to tarball download..."
     mkdir -p "${SUDOKU_DIR}"
     curl -fsSL "https://codeload.github.com/SUDOKU-ASCII/sudoku/tar.gz/${SUDOKU_REF}" \
