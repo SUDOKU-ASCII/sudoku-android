@@ -88,6 +88,7 @@ python3 - <<PY
 from __future__ import annotations
 
 import pathlib
+import re
 
 path = pathlib.Path("${SUDOKU_DIR}") / "internal/app/client_target.go"
 data = path.read_text(encoding="utf-8")
@@ -120,16 +121,22 @@ func_text = data[start:end]
 if "wrapConnForTrafficStats" in func_text:
     raise SystemExit(0)
 
-before_proxy = "return conn, true"
-after_proxy = "return wrapConnForTrafficStats(conn, true), true"
-before_direct = "return dConn, true"
-after_direct = "return wrapConnForTrafficStats(dConn, false), true"
+def replace_return(text: str, conn_name: str, should_proxy: bool) -> tuple[str, int]:
+    pattern = re.compile(
+        rf"return\s+{re.escape(conn_name)}\s*,\s*((?:[A-Za-z_][A-Za-z0-9_]*\s*,\s*)?)true"
+    )
 
-if before_proxy not in func_text or before_direct not in func_text:
-    raise SystemExit("dialTarget returns not found (upstream changed?)")
+    def repl(match: re.Match[str]) -> str:
+        middle = match.group(1) or ""
+        return f"return wrapConnForTrafficStats({conn_name}, {str(should_proxy).lower()}), {middle}true"
 
-func_text = func_text.replace(before_proxy, after_proxy, 1)
-func_text = func_text.replace(before_direct, after_direct, 1)
+    return pattern.subn(repl, text, count=1)
+
+func_text, proxy_count = replace_return(func_text, "conn", True)
+func_text, direct_count = replace_return(func_text, "dConn", False)
+
+if proxy_count != 1 or direct_count != 1:
+    raise SystemExit("dialTarget success returns not found (upstream changed?)")
 
 path.write_text(data[:start] + func_text + data[end:], encoding="utf-8")
 print("Patched", path)
