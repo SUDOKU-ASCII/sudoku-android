@@ -1,13 +1,10 @@
 package com.futaiii.sudodroid.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.MutablePreferences
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -23,65 +20,67 @@ class NodeRepository(private val context: Context) {
     private val keyGlobalProxySettings = stringPreferencesKey("global_proxy_settings_json")
     private val keyReverseForwarderSettings = stringPreferencesKey("reverse_forwarder_settings_json")
 
-    val nodes: Flow<List<NodeConfig>> = context.nodeDataStore.data
-        .map { prefs -> readNodes(prefs) }
-        .distinctUntilChanged()
+    val nodes: Flow<List<NodeConfig>> = context.nodeDataStore.data.map { prefs ->
+        prefs[keyNodes]?.let { stored ->
+            runCatching { json.decodeFromString<List<NodeConfig>>(stored) }.getOrElse { emptyList() }
+        } ?: emptyList()
+    }
 
-    val globalProxySettings: Flow<GlobalProxySettings> = context.nodeDataStore.data
-        .map { prefs -> decodeOrDefault(prefs[keyGlobalProxySettings], GlobalProxySettings()) }
-        .distinctUntilChanged()
+    val globalProxySettings: Flow<GlobalProxySettings> = context.nodeDataStore.data.map { prefs ->
+        prefs[keyGlobalProxySettings]?.let { stored ->
+            runCatching { json.decodeFromString<GlobalProxySettings>(stored) }
+                .getOrNull()
+        } ?: GlobalProxySettings()
+    }
 
-    val reverseForwarderSettings: Flow<ReverseForwarderSettings> = context.nodeDataStore.data
-        .map { prefs -> decodeOrDefault(prefs[keyReverseForwarderSettings], ReverseForwarderSettings()) }
-        .distinctUntilChanged()
+    val reverseForwarderSettings: Flow<ReverseForwarderSettings> = context.nodeDataStore.data.map { prefs ->
+        prefs[keyReverseForwarderSettings]?.let { stored ->
+            runCatching { json.decodeFromString<ReverseForwarderSettings>(stored) }
+                .getOrNull()
+        } ?: ReverseForwarderSettings()
+    }
 
-    val lastActiveId: Flow<String?> = context.nodeDataStore.data
-        .map { prefs -> prefs[keyActiveId] }
-        .distinctUntilChanged()
+    val lastActiveId: Flow<String?> = context.nodeDataStore.data.map { prefs ->
+        prefs[keyActiveId]
+    }
 
     suspend fun saveActiveId(id: String?) {
         context.nodeDataStore.edit { prefs ->
             if (id != null) {
-                if (prefs[keyActiveId] == id) return@edit
                 prefs[keyActiveId] = id
             } else {
-                if (!prefs.contains(keyActiveId)) return@edit
                 prefs.remove(keyActiveId)
             }
         }
     }
 
     suspend fun save(node: NodeConfig) {
-        mutateNodes { current ->
-            val idx = current.indexOfFirst { it.id == node.id }
+        val updated = nodes.first().toMutableList().apply {
+            val idx = indexOfFirst { it.id == node.id }
             if (idx >= 0) {
-                current[idx] = node
+                this[idx] = node
             } else {
-                current.add(node)
+                add(node)
             }
         }
+        persist(updated)
     }
 
     suspend fun saveGlobalProxySettings(settings: GlobalProxySettings) {
         context.nodeDataStore.edit { prefs ->
-            val encoded = json.encodeToString(settings)
-            if (prefs[keyGlobalProxySettings] != encoded) {
-                prefs[keyGlobalProxySettings] = encoded
-            }
+            prefs[keyGlobalProxySettings] = json.encodeToString(settings)
         }
     }
 
     suspend fun saveReverseForwarderSettings(settings: ReverseForwarderSettings) {
         context.nodeDataStore.edit { prefs ->
-            val encoded = json.encodeToString(settings)
-            if (prefs[keyReverseForwarderSettings] != encoded) {
-                prefs[keyReverseForwarderSettings] = encoded
-            }
+            prefs[keyReverseForwarderSettings] = json.encodeToString(settings)
         }
     }
 
     suspend fun delete(id: String) {
-        mutateNodes { current -> current.removeAll { it.id == id } }
+        val updated = nodes.first().filterNot { it.id == id }
+        persist(updated)
     }
 
     suspend fun importShortLink(link: String, nameOverride: String? = null): NodeConfig {
@@ -91,33 +90,9 @@ class NodeRepository(private val context: Context) {
         return named
     }
 
-    private fun readNodes(prefs: Preferences): List<NodeConfig> {
-        return decodeOrDefault(prefs[keyNodes], emptyList())
-    }
-
-    private suspend fun mutateNodes(transform: (MutableList<NodeConfig>) -> Unit) {
-        context.nodeDataStore.edit { prefs ->
-            val updated = readNodes(prefs).toMutableList()
-            transform(updated)
-            persist(prefs, updated)
-        }
-    }
-
     private suspend fun persist(list: List<NodeConfig>) {
         context.nodeDataStore.edit { prefs ->
-            persist(prefs, list)
+            prefs[keyNodes] = json.encodeToString(list)
         }
-    }
-
-    private fun persist(prefs: MutablePreferences, list: List<NodeConfig>) {
-        val encoded = json.encodeToString(list)
-        if (prefs[keyNodes] != encoded) {
-            prefs[keyNodes] = encoded
-        }
-    }
-
-    private inline fun <reified T> decodeOrDefault(stored: String?, fallback: T): T {
-        if (stored.isNullOrBlank()) return fallback
-        return runCatching { json.decodeFromString<T>(stored) }.getOrElse { fallback }
     }
 }

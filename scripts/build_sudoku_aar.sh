@@ -12,7 +12,6 @@ OUT_AAR="${ROOT}/app/libs/sudoku.aar"
 ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-21}"
 GOMOBILE_BIN="${GOMOBILE_BIN:-gomobile}"
 GOMOBILE_TARGETS="${GOMOBILE_TARGETS:-android/arm,android/arm64}"
-GOMOBILE_BIND_REF="${GOMOBILE_BIND_REF:-}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-0}"
 SKIP_GOMOBILE_BIND="${SKIP_GOMOBILE_BIND:-0}"
 
@@ -143,21 +142,6 @@ path.write_text(data[:start] + func_text + data[end:], encoding="utf-8")
 print("Patched", path)
 PY
 
-echo "Tidying Go module dependencies..."
-pushd "${SUDOKU_DIR}" >/dev/null
-go mod tidy
-
-echo "Resolving gomobile bind dependency..."
-if [[ -n "${GOMOBILE_BIND_REF}" ]]; then
-  go get ./pkg/mobile "golang.org/x/mobile/bind@${GOMOBILE_BIND_REF}"
-else
-  go get ./pkg/mobile golang.org/x/mobile/bind
-fi
-
-echo "Verifying mobile Go package..."
-go build ./pkg/mobile
-popd >/dev/null
-
 # Build AAR
 if [[ "${SKIP_GOMOBILE_BIND}" == "1" ]]; then
   echo "Skipping gomobile bind (SKIP_GOMOBILE_BIND=1)"
@@ -165,6 +149,7 @@ else
   echo "Building AAR..."
   mkdir -p "$(dirname "${OUT_AAR}")"
   pushd "${SUDOKU_DIR}" >/dev/null
+  go get -d golang.org/x/mobile/bind
   "${GOMOBILE_BIN}" bind \
     -target="${GOMOBILE_TARGETS}" \
     -androidapi "${ANDROID_API_LEVEL}" \

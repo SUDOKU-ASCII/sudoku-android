@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, FlowPreview::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.futaiii.sudodroid.ui
 
@@ -85,7 +85,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -120,11 +119,7 @@ import com.futaiii.sudodroid.data.uplinkPreference
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.protocol.ShortLinkCodec
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -132,12 +127,6 @@ private enum class RunningMode {
     VPN,
     PROXY_ONLY
 }
-
-private data class ReverseForwarderDraft(
-    val dialUrl: String,
-    val listenAddr: String,
-    val insecure: Boolean
-)
 
 private val AppDrawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)
 private val AppCardShape = RoundedCornerShape(28.dp)
@@ -172,7 +161,6 @@ fun AppRoot(
     var reverseDialUrl by rememberSaveable { mutableStateOf("") }
     var reverseListenAddr by rememberSaveable { mutableStateOf("") }
     var reverseInsecure by rememberSaveable { mutableStateOf(false) }
-    var reverseSettingsHydrated by remember { mutableStateOf(false) }
     var globalProxyMode by rememberSaveable { mutableStateOf(ProxyMode.PAC) }
     var globalRuleUrlsText by rememberSaveable { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
@@ -190,7 +178,6 @@ fun AppRoot(
             reverseDialUrl = state.reverseForwarderSettings.dialUrl
             reverseListenAddr = state.reverseForwarderSettings.listenAddr
             reverseInsecure = state.reverseForwarderSettings.insecure
-            reverseSettingsHydrated = true
         }
     }
 
@@ -199,29 +186,7 @@ fun AppRoot(
             reverseDialUrl = state.reverseForwardStatus.dialUrl
             reverseListenAddr = state.reverseForwardStatus.listenAddr
             reverseInsecure = state.reverseForwardStatus.insecure
-            reverseSettingsHydrated = true
         }
-    }
-
-    LaunchedEffect(reverseSettingsHydrated) {
-        if (!reverseSettingsHydrated) return@LaunchedEffect
-        snapshotFlow {
-            ReverseForwarderDraft(
-                dialUrl = reverseDialUrl,
-                listenAddr = reverseListenAddr,
-                insecure = reverseInsecure
-            )
-        }
-            .drop(1)
-            .distinctUntilChanged()
-            .debounce(400)
-            .collect { draft ->
-                viewModel.saveReverseForwarderSettings(
-                    dialUrl = draft.dialUrl,
-                    listenAddr = draft.listenAddr,
-                    insecure = draft.insecure
-                )
-            }
     }
 
     LaunchedEffect(state.globalProxySettings) {
@@ -361,9 +326,18 @@ fun AppRoot(
                         dialUrl = reverseDialUrl,
                         listenAddr = reverseListenAddr,
                         insecure = reverseInsecure,
-                        onDialUrlChange = { reverseDialUrl = it },
-                        onListenAddrChange = { reverseListenAddr = it },
-                        onInsecureChange = { reverseInsecure = it },
+                        onDialUrlChange = {
+                            reverseDialUrl = it
+                            viewModel.saveReverseForwarderSettings(it, reverseListenAddr, reverseInsecure)
+                        },
+                        onListenAddrChange = {
+                            reverseListenAddr = it
+                            viewModel.saveReverseForwarderSettings(reverseDialUrl, it, reverseInsecure)
+                        },
+                        onInsecureChange = {
+                            reverseInsecure = it
+                            viewModel.saveReverseForwarderSettings(reverseDialUrl, reverseListenAddr, it)
+                        },
                         onStart = {
                             viewModel.startReverseForwarder(
                                 listenAddr = reverseListenAddr,

@@ -13,8 +13,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      GOMOBILE_VERSION: v0.0.0-20260312152759-81488f6aeb60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,7 +39,7 @@ jobs:
 
       - name: Install gomobile
         run: |
-          go install golang.org/x/mobile/cmd/gomobile@${GOMOBILE_VERSION}
+          go install golang.org/x/mobile/cmd/gomobile@latest
           gomobile init
 
       - name: Install Android SDK / NDK
@@ -87,7 +85,6 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
           SUDOKU_REF: v0.4.2
-          GOMOBILE_BIND_REF: ${{ env.GOMOBILE_VERSION }}
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -382,5 +379,5 @@ jobs:
           make_latest: true
           body: |
             - Sync the embedded Sudoku core build to upstream `v0.4.2`.
-            - Reduce long-running Android overhead with adaptive service polling, fewer redundant writes, and leaner state updates.
-            - Improve maintainability by consolidating shared service runtime logic, trimming unused app dependencies, and hardening the CI AAR build.
+            - Update default PAC rules to match the new core defaults, including the `!`-prefixed ad reject list.
+            - Split ASCII preference into explicit uplink and downlink selectors while preserving the canonical wire mapping.

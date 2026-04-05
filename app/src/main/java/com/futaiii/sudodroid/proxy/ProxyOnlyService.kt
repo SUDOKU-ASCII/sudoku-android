@@ -13,9 +13,9 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.futaiii.sudodroid.MainActivity
 import com.futaiii.sudodroid.R
+import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
-import com.futaiii.sudodroid.runtime.ServiceRuntimeSupport
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -23,9 +23,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class ProxyOnlyService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -60,7 +63,7 @@ class ProxyOnlyService : Service() {
                     return START_STICKY
                 }
                 scope.launch {
-                    val node = ServiceRuntimeSupport.selectNode(this@ProxyOnlyService, nodeId, allowFallback = false)
+                    val node = selectNode(nodeId, allowFallback = false)
                     if (node == null) {
                         Log.e(TAG, "Switch failed: node not found")
                         return@launch
@@ -92,7 +95,7 @@ class ProxyOnlyService : Service() {
                 val requestedId = intent?.getStringExtra(EXTRA_NODE_ID)
                 startJob?.cancel()
                 startJob = scope.launch {
-                    val node = ServiceRuntimeSupport.selectNode(this@ProxyOnlyService, requestedId, allowFallback = true)
+                    val node = selectNode(requestedId, allowFallback = true)
                     if (node == null) {
                         Log.e(TAG, "Cannot start proxy-only mode: node not found")
                         stopProxyInternal(stopCore = true)
@@ -141,15 +144,29 @@ class ProxyOnlyService : Service() {
     }
 
     private suspend fun startCore(node: NodeConfig) {
-        ServiceRuntimeSupport.startCore(this, node)
+        val repo = (application as SudodroidApp).nodeRepository
+        val global = repo.globalProxySettings.first()
+        val json = GoCoreClient.buildConfigJson(node, global)
+        GoCoreClient.start(json)
+        GoCoreClient.resetTrafficStats()
+    }
+
+    private suspend fun selectNode(nodeId: String?, allowFallback: Boolean): NodeConfig? {
+        val repo = (application as SudodroidApp).nodeRepository
+        val list = repo.nodes.first()
+        if (list.isEmpty()) return null
+        if (nodeId.isNullOrBlank()) return list.first()
+        val found = list.find { it.id == nodeId }
+        return found ?: if (allowFallback) list.first() else null
     }
 
     private fun startNotificationUpdates() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            ServiceRuntimeSupport.pollTrafficStats(isRunning = { coreRunning }) { stats ->
-                mgr.notify(NOTI_ID, buildNotification(activeNode, stats))
+            while (coreRunning) {
+                mgr.notify(NOTI_ID, buildNotification(activeNode, GoCoreClient.getTrafficStats()))
+                delay(1_000)
             }
         }
     }
@@ -172,7 +189,7 @@ class ProxyOnlyService : Service() {
         activeNode = null
         statusFlow.value = false
         activeNodeIdFlow.value = null
-        runCatching { stopForegroundCompat() }
+        runCatching { stopForeground(true) }
     }
 
     private fun ensureNotificationChannel() {
@@ -202,7 +219,7 @@ class ProxyOnlyService : Service() {
         val text = if (stats == null) {
             base
         } else {
-            "$base\n${ServiceRuntimeSupport.formatTrafficText(stats)}"
+            "$base\n直连 ↑${formatBytes(stats.directTx)} ↓${formatBytes(stats.directRx)} | 代理 ↑${formatBytes(stats.proxyTx)} ↓${formatBytes(stats.proxyRx)}"
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -215,12 +232,19 @@ class ProxyOnlyService : Service() {
             .build()
     }
 
-    private fun stopForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
+    private fun formatBytes(bytes: Long): String {
+        val value = bytes.coerceAtLeast(0L).toDouble()
+        val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
+        var v = value
+        var idx = 0
+        while (v >= 1024 && idx < units.lastIndex) {
+            v /= 1024
+            idx++
+        }
+        return if (idx == 0) {
+            "${v.toLong()}${units[idx]}"
         } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
+            String.format(Locale.US, "%.1f%s", v, units[idx])
         }
     }
 

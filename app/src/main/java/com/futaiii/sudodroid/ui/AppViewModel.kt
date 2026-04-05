@@ -18,16 +18,13 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class NodeUi(
@@ -86,15 +83,9 @@ class AppViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            while (currentCoroutineContext().isActive) {
-                val status = GoCoreClient.getReverseForwardStatus()
-                reverseForwardStatus.value = status
-                delay(
-                    when {
-                        reverseForwardBusy.value || status.running || status.lastError.isNotBlank() -> 1_000L
-                        else -> 5_000L
-                    }
-                )
+            while (true) {
+                reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
+                delay(1_000)
             }
         }
     }
@@ -160,7 +151,7 @@ class AppViewModel(
     fun importShortLink(link: String, nameOverride: String?, onSuccess: (() -> Unit)? = null) {
         viewModelScope.launch {
             runCatching { repo.importShortLink(link, nameOverride) }
-                .onSuccess { imported ->
+                .onSuccess { imported -> 
                     activeId.value = imported.id
                     repo.saveActiveId(imported.id)
                     onSuccess?.invoke()
@@ -181,15 +172,15 @@ class AppViewModel(
                     java.net.Proxy.NO_PROXY
                 }
 
-                java.net.Socket(proxy).use { socket ->
-                    socket.tcpNoDelay = true
-                    // Connect to the server port. If using proxy, this tests Client -> Proxy -> Server.
-                    // If direct, this tests Client -> Server.
-                    socket.connect(java.net.InetSocketAddress(node.host.trim().removeSurrounding("[", "]"), node.port), 5_000)
-                }
+                val socket = java.net.Socket(proxy)
+                socket.tcpNoDelay = true
+                // Connect to the server port. If using proxy, this tests Client -> Proxy -> Server.
+                // If direct, this tests Client -> Server.
+                socket.connect(java.net.InetSocketAddress(node.host.trim().removeSurrounding("[", "]"), node.port), 5_000)
+                socket.close()
                 kotlin.math.abs((System.nanoTime() - start) / 1_000_000L)
             }.getOrNull()
-            latencyMap.update { it + (node.id to latency) }
+            latencyMap.value = latencyMap.value.toMutableMap().apply { put(node.id, latency) }
         }
     }
 
