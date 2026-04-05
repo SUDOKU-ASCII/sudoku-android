@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the upstream v0.4.1 tag.
-SUDOKU_REF="${SUDOKU_REF:-v0.4.1}"
+# Default to the upstream v0.4.2 tag.
+SUDOKU_REF="${SUDOKU_REF:-v0.4.2}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -142,6 +142,14 @@ path.write_text(data[:start] + func_text + data[end:], encoding="utf-8")
 print("Patched", path)
 PY
 
+echo "Tidying Go module dependencies..."
+pushd "${SUDOKU_DIR}" >/dev/null
+go mod tidy
+
+echo "Verifying mobile Go package..."
+go build ./pkg/mobile
+popd >/dev/null
+
 # Build AAR
 if [[ "${SKIP_GOMOBILE_BIND}" == "1" ]]; then
   echo "Skipping gomobile bind (SKIP_GOMOBILE_BIND=1)"
@@ -149,7 +157,6 @@ else
   echo "Building AAR..."
   mkdir -p "$(dirname "${OUT_AAR}")"
   pushd "${SUDOKU_DIR}" >/dev/null
-  go get -d golang.org/x/mobile/bind
   "${GOMOBILE_BIN}" bind \
     -target="${GOMOBILE_TARGETS}" \
     -androidapi "${ANDROID_API_LEVEL}" \

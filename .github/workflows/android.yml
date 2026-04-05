@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.1
+          SUDOKU_REF: v0.4.2
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -378,6 +378,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Sync the embedded Sudoku core build to upstream `v0.4.1`.
-            - Update default PAC rules to match the new core defaults, including the `!`-prefixed ad reject list.
-            - Split ASCII preference into explicit uplink and downlink selectors while preserving the canonical wire mapping.
+            - Sync the embedded Sudoku core build to upstream `v0.4.2`.
+            - Reduce long-running Android overhead with adaptive service polling, fewer redundant writes, and leaner state updates.
+            - Improve maintainability by consolidating shared service runtime logic and trimming unused app dependencies.

@@ -13,24 +13,21 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.futaiii.sudodroid.MainActivity
 import com.futaiii.sudodroid.R
-import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.qs.VpnTileService
+import com.futaiii.sudodroid.runtime.ServiceRuntimeSupport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SudokuVpnService : VpnService() {
@@ -68,7 +65,7 @@ class SudokuVpnService : VpnService() {
                         return START_STICKY
                     }
                     scope.launch {
-                        val node = selectNode(nodeId, allowFallback = false)
+                        val node = ServiceRuntimeSupport.selectNode(this@SudokuVpnService, nodeId, allowFallback = false)
                         if (node == null) {
                             Log.e(TAG, "Switch node failed: node not found for id=$nodeId")
                             return@launch
@@ -118,7 +115,7 @@ class SudokuVpnService : VpnService() {
                     val nodeId = intent?.getStringExtra(EXTRA_NODE_ID)
                     startJob?.cancel()
                     startJob = scope.launch {
-                        val node = selectNode(nodeId, allowFallback = true)
+                        val node = ServiceRuntimeSupport.selectNode(this@SudokuVpnService, nodeId, allowFallback = true)
                         if (node == null) {
                             Log.e(TAG, "Cannot start VPN: node not found")
                             stopVpnInternal()
@@ -129,7 +126,7 @@ class SudokuVpnService : VpnService() {
                         activeNode = node
                         try {
                             startCore(node)
-                            buildVpnInterface(node)
+                            buildVpnInterface()
                             startTunnel(node)
                             statusFlow.value = true
                             VpnTileService.requestListeningState(this@SudokuVpnService)
@@ -174,10 +171,8 @@ class SudokuVpnService : VpnService() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            while (true) {
-                val stats = GoCoreClient.getTrafficStats()
+            ServiceRuntimeSupport.pollTrafficStats(isRunning = { tunnelStarted }) { stats ->
                 mgr.notify(NOTI_ID, buildNotification(stats))
-                delay(1_000)
             }
         }
     }
@@ -187,7 +182,7 @@ class SudokuVpnService : VpnService() {
         notificationJob = null
     }
 
-    private fun buildVpnInterface(node: NodeConfig) {
+    private fun buildVpnInterface() {
         tunInterface?.close()
         val builder = Builder()
             .setSession("Sudodroid")
@@ -267,7 +262,7 @@ class SudokuVpnService : VpnService() {
             stopWithTimeout("hev-socks5-tunnel", 1_500) { Socks5TunnelNative.stop() }
             stopWithTimeout("sudoku-core", 1_500) { GoCoreClient.stop() }
 
-            runCatching { stopForeground(true) }
+            runCatching { stopForegroundCompat() }
         } finally {
             stopInProgress.set(false)
         }
@@ -293,15 +288,6 @@ class SudokuVpnService : VpnService() {
         if (thread.isAlive) {
             Log.w(TAG, "Timed out stopping $name after ${timeoutMs}ms; continuing")
         }
-    }
-
-    private suspend fun selectNode(nodeId: String?, allowFallback: Boolean): NodeConfig? {
-        val repo = (application as SudodroidApp).nodeRepository
-        val list = repo.nodes.first()
-        if (list.isEmpty()) return null
-        if (nodeId.isNullOrBlank()) return list.first()
-        val found = list.find { it.id == nodeId }
-        return found ?: if (allowFallback) list.first() else null
     }
 
     private fun buildTunnelConfig(node: NodeConfig): String {
@@ -339,11 +325,7 @@ class SudokuVpnService : VpnService() {
     }
 
     private suspend fun startCore(node: NodeConfig) {
-        val repo = (application as SudodroidApp).nodeRepository
-        val global = repo.globalProxySettings.first()
-        val json = GoCoreClient.buildConfigJson(node, global)
-        GoCoreClient.start(json)
-        GoCoreClient.resetTrafficStats()
+        ServiceRuntimeSupport.startCore(this, node)
     }
     
     private fun ensureNotificationChannel() {
@@ -377,26 +359,15 @@ class SudokuVpnService : VpnService() {
     }
 
     private fun formatTrafficText(stats: GoCoreClient.TrafficStats): String {
-        val directTx = formatBytes(stats.directTx)
-        val directRx = formatBytes(stats.directRx)
-        val proxyTx = formatBytes(stats.proxyTx)
-        val proxyRx = formatBytes(stats.proxyRx)
-        return "直连 ↑$directTx ↓$directRx | 代理 ↑$proxyTx ↓$proxyRx"
+        return ServiceRuntimeSupport.formatTrafficText(stats)
     }
 
-    private fun formatBytes(bytes: Long): String {
-        val value = bytes.coerceAtLeast(0L).toDouble()
-        val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
-        var v = value
-        var idx = 0
-        while (v >= 1024 && idx < units.lastIndex) {
-            v /= 1024
-            idx++
-        }
-        return if (idx == 0) {
-            "${v.toLong()}${units[idx]}"
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
-            String.format(Locale.US, "%.1f%s", v, units[idx])
+            @Suppress("DEPRECATION")
+            stopForeground(true)
         }
     }
 
