@@ -14,8 +14,10 @@ import androidx.core.app.NotificationCompat
 import com.futaiii.sudodroid.MainActivity
 import com.futaiii.sudodroid.R
 import com.futaiii.sudodroid.SudodroidApp
+import com.futaiii.sudodroid.core.CoreRuntime
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
+import com.futaiii.sudodroid.util.TrafficStatsFormatter
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -25,10 +27,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 class ProxyOnlyService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -145,28 +146,34 @@ class ProxyOnlyService : Service() {
 
     private suspend fun startCore(node: NodeConfig) {
         val repo = (application as SudodroidApp).nodeRepository
-        val global = repo.globalProxySettings.first()
-        val json = GoCoreClient.buildConfigJson(node, global)
-        GoCoreClient.start(json)
-        GoCoreClient.resetTrafficStats()
+        CoreRuntime.startCore(repo, node)
     }
 
     private suspend fun selectNode(nodeId: String?, allowFallback: Boolean): NodeConfig? {
         val repo = (application as SudodroidApp).nodeRepository
-        val list = repo.nodes.first()
-        if (list.isEmpty()) return null
-        if (nodeId.isNullOrBlank()) return list.first()
-        val found = list.find { it.id == nodeId }
-        return found ?: if (allowFallback) list.first() else null
+        return CoreRuntime.selectNode(repo, nodeId, allowFallback)
     }
 
     private fun startNotificationUpdates() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            while (coreRunning) {
-                mgr.notify(NOTI_ID, buildNotification(activeNode, GoCoreClient.getTrafficStats()))
-                delay(1_000)
+            var lastStats: GoCoreClient.TrafficStats? = null
+            var lastNotificationText: String? = null
+            while (isActive && coreRunning) {
+                val stats = GoCoreClient.getTrafficStats()
+                val notificationText = buildNotificationText(activeNode, stats)
+                if (notificationText != lastNotificationText) {
+                    mgr.notify(NOTI_ID, buildNotification(activeNode, stats))
+                    lastNotificationText = notificationText
+                }
+                val delayMs = if (stats != null && stats != lastStats) {
+                    NOTIFICATION_ACTIVE_POLL_MS
+                } else {
+                    NOTIFICATION_IDLE_POLL_MS
+                }
+                lastStats = stats
+                delay(delayMs)
             }
         }
     }
@@ -211,16 +218,8 @@ class ProxyOnlyService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val base = node?.let {
-            val name = it.name.ifBlank { it.host }
-            "Proxy only · $name · 127.0.0.1:${it.localPort}"
-        } ?: getString(R.string.notification_proxy_running)
-
-        val text = if (stats == null) {
-            base
-        } else {
-            "$base\n直连 ↑${formatBytes(stats.directTx)} ↓${formatBytes(stats.directRx)} | 代理 ↑${formatBytes(stats.proxyTx)} ↓${formatBytes(stats.proxyRx)}"
-        }
+        val base = buildNotificationBase(node)
+        val text = buildNotificationText(node, stats)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -232,20 +231,19 @@ class ProxyOnlyService : Service() {
             .build()
     }
 
-    private fun formatBytes(bytes: Long): String {
-        val value = bytes.coerceAtLeast(0L).toDouble()
-        val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
-        var v = value
-        var idx = 0
-        while (v >= 1024 && idx < units.lastIndex) {
-            v /= 1024
-            idx++
-        }
-        return if (idx == 0) {
-            "${v.toLong()}${units[idx]}"
-        } else {
-            String.format(Locale.US, "%.1f%s", v, units[idx])
-        }
+    private fun buildNotificationBase(node: NodeConfig?): String {
+        return node?.let {
+            val name = it.name.ifBlank { it.host }
+            "Proxy only · $name · 127.0.0.1:${it.localPort}"
+        } ?: getString(R.string.notification_proxy_running)
+    }
+
+    private fun buildNotificationText(
+        node: NodeConfig?,
+        stats: GoCoreClient.TrafficStats?
+    ): String {
+        val base = buildNotificationBase(node)
+        return stats?.let { "$base\n${TrafficStatsFormatter.formatSummary(it)}" } ?: base
     }
 
     companion object {
@@ -257,6 +255,8 @@ class ProxyOnlyService : Service() {
         private const val CHANNEL_ID = "sudoku_proxy_only"
         private const val NOTI_ID = 2
         private const val TAG = "ProxyOnlyService"
+        private const val NOTIFICATION_ACTIVE_POLL_MS = 1_000L
+        private const val NOTIFICATION_IDLE_POLL_MS = 5_000L
 
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow

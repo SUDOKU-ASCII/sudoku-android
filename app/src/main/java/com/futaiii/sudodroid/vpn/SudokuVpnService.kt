@@ -11,13 +11,16 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.futaiii.sudodroid.BuildConfig
 import com.futaiii.sudodroid.MainActivity
 import com.futaiii.sudodroid.R
 import com.futaiii.sudodroid.SudodroidApp
+import com.futaiii.sudodroid.core.CoreRuntime
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.qs.VpnTileService
+import com.futaiii.sudodroid.util.TrafficStatsFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,11 +29,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SudokuVpnService : VpnService() {
@@ -174,10 +176,22 @@ class SudokuVpnService : VpnService() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            while (true) {
+            var lastStats: GoCoreClient.TrafficStats? = null
+            var lastNotificationText: String? = null
+            while (isActive && tunnelStarted) {
                 val stats = GoCoreClient.getTrafficStats()
-                mgr.notify(NOTI_ID, buildNotification(stats))
-                delay(1_000)
+                val notificationText = buildNotificationText(stats)
+                if (notificationText != lastNotificationText) {
+                    mgr.notify(NOTI_ID, buildNotification(stats))
+                    lastNotificationText = notificationText
+                }
+                val delayMs = if (stats != null && stats != lastStats) {
+                    NOTIFICATION_ACTIVE_POLL_MS
+                } else {
+                    NOTIFICATION_IDLE_POLL_MS
+                }
+                lastStats = stats
+                delay(delayMs)
             }
         }
     }
@@ -297,11 +311,7 @@ class SudokuVpnService : VpnService() {
 
     private suspend fun selectNode(nodeId: String?, allowFallback: Boolean): NodeConfig? {
         val repo = (application as SudodroidApp).nodeRepository
-        val list = repo.nodes.first()
-        if (list.isEmpty()) return null
-        if (nodeId.isNullOrBlank()) return list.first()
-        val found = list.find { it.id == nodeId }
-        return found ?: if (allowFallback) list.first() else null
+        return CoreRuntime.selectNode(repo, nodeId, allowFallback)
     }
 
     private fun buildTunnelConfig(node: NodeConfig): String {
@@ -310,6 +320,7 @@ class SudokuVpnService : VpnService() {
         val mtu = 8500
         val ipv4 = "198.18.0.1"
         val ipv6 = "fc00::1"
+        val tunnelLogLevel = if (BuildConfig.DEBUG) "debug" else "warn"
 
         // Config modeled after the official sockstun TProxyService:
         // - tunnel.{mtu,ipv4,ipv6} match the VPN interface.
@@ -334,16 +345,13 @@ class SudokuVpnService : VpnService() {
               cache-size: 10000
             misc:
               task-stack-size: 81920
-              log-level: debug
+              log-level: $tunnelLogLevel
         """.trimIndent()
     }
 
     private suspend fun startCore(node: NodeConfig) {
         val repo = (application as SudodroidApp).nodeRepository
-        val global = repo.globalProxySettings.first()
-        val json = GoCoreClient.buildConfigJson(node, global)
-        GoCoreClient.start(json)
-        GoCoreClient.resetTrafficStats()
+        CoreRuntime.startCore(repo, node)
     }
     
     private fun ensureNotificationChannel() {
@@ -365,7 +373,7 @@ class SudokuVpnService : VpnService() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val text = stats?.let { formatTrafficText(it) } ?: getString(R.string.notification_running)
+        val text = buildNotificationText(stats)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))
@@ -376,28 +384,9 @@ class SudokuVpnService : VpnService() {
             .build()
     }
 
-    private fun formatTrafficText(stats: GoCoreClient.TrafficStats): String {
-        val directTx = formatBytes(stats.directTx)
-        val directRx = formatBytes(stats.directRx)
-        val proxyTx = formatBytes(stats.proxyTx)
-        val proxyRx = formatBytes(stats.proxyRx)
-        return "直连 ↑$directTx ↓$directRx | 代理 ↑$proxyTx ↓$proxyRx"
-    }
-
-    private fun formatBytes(bytes: Long): String {
-        val value = bytes.coerceAtLeast(0L).toDouble()
-        val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
-        var v = value
-        var idx = 0
-        while (v >= 1024 && idx < units.lastIndex) {
-            v /= 1024
-            idx++
-        }
-        return if (idx == 0) {
-            "${v.toLong()}${units[idx]}"
-        } else {
-            String.format(Locale.US, "%.1f%s", v, units[idx])
-        }
+    private fun buildNotificationText(stats: GoCoreClient.TrafficStats?): String {
+        return stats?.let(TrafficStatsFormatter::formatSummary)
+            ?: getString(R.string.notification_running)
     }
 
     companion object {
@@ -407,6 +396,8 @@ class SudokuVpnService : VpnService() {
         private const val CHANNEL_ID = "sudoku_vpn"
         private const val NOTI_ID = 1
         private const val TAG = "SudokuVpnService"
+        private const val NOTIFICATION_ACTIVE_POLL_MS = 1_000L
+        private const val NOTIFICATION_IDLE_POLL_MS = 5_000L
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow
         val isRunning: Boolean

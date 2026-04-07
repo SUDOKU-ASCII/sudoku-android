@@ -14,6 +14,20 @@ object GoCoreClient {
     private const val TAG = "GoCoreClient"
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
     private val lifecycleLock = Any()
+    private val trafficCacheLock = Any()
+    private val reverseStatusCacheLock = Any()
+
+    @Volatile
+    private var lastTrafficStatsRaw: String? = null
+
+    @Volatile
+    private var lastTrafficStats: TrafficStats? = null
+
+    @Volatile
+    private var lastReverseForwardStatusRaw: String? = null
+
+    @Volatile
+    private var lastReverseForwardStatus: ReverseForwardStatus? = null
     // gomobile bind -javapkg com.futaiii.sudoku ./pkg/mobile
     // generates class com.futaiii.sudoku.mobile.Mobile
     private const val MOBILE_CLASS = "com.futaiii.sudoku.mobile.Mobile"
@@ -103,6 +117,8 @@ object GoCoreClient {
 
     fun start(configJson: String) {
         withLifecycleLock {
+            invalidateTrafficStatsCache()
+            invalidateReverseForwardStatusCache()
             // Ensure previous instance is stopped
             runCatching { MobileBinding.stop() }
             try {
@@ -115,20 +131,34 @@ object GoCoreClient {
     }
 
     fun stop() {
-        withLifecycleLock { MobileBinding.stop() }
+        withLifecycleLock {
+            MobileBinding.stop()
+            invalidateTrafficStatsCache()
+            invalidateReverseForwardStatusCache()
+        }
     }
 
     fun getTrafficStats(): TrafficStats? {
         val raw = MobileBinding.getTrafficStatsJsonOrNull() ?: return null
-        return runCatching { json.decodeFromString<TrafficStats>(raw) }.getOrNull()
+        synchronized(trafficCacheLock) {
+            if (raw == lastTrafficStatsRaw) {
+                return lastTrafficStats
+            }
+            val decoded = runCatching { json.decodeFromString<TrafficStats>(raw) }.getOrNull()
+            lastTrafficStatsRaw = raw
+            lastTrafficStats = decoded
+            return decoded
+        }
     }
 
     fun resetTrafficStats() {
         MobileBinding.resetTrafficStats()
+        invalidateTrafficStatsCache()
     }
 
     fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
         withLifecycleLock {
+            invalidateReverseForwardStatusCache()
             try {
                 MobileBinding.startReverseForwarder(listenAddr.trim(), dialUrl.trim(), insecure)
             } catch (t: Throwable) {
@@ -139,16 +169,27 @@ object GoCoreClient {
     }
 
     fun stopReverseForwarder() {
-        withLifecycleLock { MobileBinding.stopReverseForwarder() }
+        withLifecycleLock {
+            MobileBinding.stopReverseForwarder()
+            invalidateReverseForwardStatusCache()
+        }
     }
 
     fun getReverseForwardStatus(): ReverseForwardStatus {
         val raw = MobileBinding.getReverseForwardStatusJsonOrNull() ?: return ReverseForwardStatus()
-        return runCatching { json.decodeFromString<ReverseForwardStatus>(raw) }
-            .getOrElse {
-                Log.w(TAG, "Failed to decode reverse forwarder status: $raw", it)
-                ReverseForwardStatus()
+        synchronized(reverseStatusCacheLock) {
+            if (raw == lastReverseForwardStatusRaw) {
+                return lastReverseForwardStatus ?: ReverseForwardStatus()
             }
+            val decoded = runCatching { json.decodeFromString<ReverseForwardStatus>(raw) }
+                .getOrElse {
+                    Log.w(TAG, "Failed to decode reverse forwarder status: $raw", it)
+                    ReverseForwardStatus()
+                }
+            lastReverseForwardStatusRaw = raw
+            lastReverseForwardStatus = decoded
+            return decoded
+        }
     }
 
     fun buildConfigJson(
@@ -257,6 +298,20 @@ object GoCoreClient {
         val insecure: Boolean = false,
         @SerialName("last_error") val lastError: String = ""
     )
+
+    private fun invalidateTrafficStatsCache() {
+        synchronized(trafficCacheLock) {
+            lastTrafficStatsRaw = null
+            lastTrafficStats = null
+        }
+    }
+
+    private fun invalidateReverseForwardStatusCache() {
+        synchronized(reverseStatusCacheLock) {
+            lastReverseForwardStatusRaw = null
+            lastReverseForwardStatus = null
+        }
+    }
 
     private fun normalizeHost(host: String): String {
         return host.trim().removeSurrounding("[", "]")

@@ -18,6 +18,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class NodeUi(
@@ -54,6 +56,7 @@ class AppViewModel(
     private val reverseForwardStatus = MutableStateFlow(GoCoreClient.ReverseForwardStatus())
     private val reverseForwardBusy = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
+    private var reverseForwardStatusJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -82,10 +85,44 @@ class AppViewModel(
             }
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            while (true) {
-                reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
-                delay(1_000)
+        refreshReverseForwardStatus()
+    }
+
+    private fun refreshReverseForwardStatus() {
+        ensureReverseForwardStatusPolling()
+    }
+
+    private fun updateReverseForwardStatus(status: GoCoreClient.ReverseForwardStatus) {
+        if (reverseForwardStatus.value != status) {
+            reverseForwardStatus.value = status
+        }
+        ensureReverseForwardStatusPolling()
+    }
+
+    private fun ensureReverseForwardStatusPolling() {
+        if (reverseForwardStatusJob?.isActive == true) {
+            return
+        }
+        reverseForwardStatusJob = viewModelScope.launch(Dispatchers.IO) {
+            var lastStatus = reverseForwardStatus.value
+            while (isActive) {
+                val latestStatus = GoCoreClient.getReverseForwardStatus()
+                if (latestStatus != lastStatus) {
+                    reverseForwardStatus.value = latestStatus
+                    lastStatus = latestStatus
+                }
+                val delayMs = if (latestStatus.running) {
+                    REVERSE_FORWARD_STATUS_RUNNING_POLL_MS
+                } else {
+                    REVERSE_FORWARD_STATUS_IDLE_POLL_MS
+                }
+                delay(delayMs)
+            }
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (reverseForwardStatusJob === job) {
+                    reverseForwardStatusJob = null
+                }
             }
         }
     }
@@ -128,7 +165,7 @@ class AppViewModel(
             isProxyOnlyRunning = proxyOnlyRunning,
             error = err
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppState())
 
     fun selectNode(id: String) {
         activeId.value = id
@@ -192,7 +229,7 @@ class AppViewModel(
             }.onFailure {
                 error.value = it.message ?: "Failed to start local forwarder"
             }
-            reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
+            updateReverseForwardStatus(GoCoreClient.getReverseForwardStatus())
             reverseForwardBusy.value = false
         }
     }
@@ -202,7 +239,7 @@ class AppViewModel(
             reverseForwardBusy.value = true
             runCatching { GoCoreClient.stopReverseForwarder() }
                 .onFailure { error.value = it.message ?: "Failed to stop local forwarder" }
-            reverseForwardStatus.value = GoCoreClient.getReverseForwardStatus()
+            updateReverseForwardStatus(GoCoreClient.getReverseForwardStatus())
             reverseForwardBusy.value = false
         }
     }
@@ -244,6 +281,11 @@ class AppViewModel(
                 )
             )
         }
+    }
+
+    private companion object {
+        private const val REVERSE_FORWARD_STATUS_RUNNING_POLL_MS = 2_000L
+        private const val REVERSE_FORWARD_STATUS_IDLE_POLL_MS = 15_000L
     }
 }
 

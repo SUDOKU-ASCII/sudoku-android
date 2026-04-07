@@ -378,6 +378,6 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Sync the embedded Sudoku core build to upstream `v0.4.2`.
-            - Update default PAC rules to match the new core defaults, including the `!`-prefixed ad reject list.
-            - Split ASCII preference into explicit uplink and downlink selectors while preserving the canonical wire mapping.
+            - Reduce idle battery drain by throttling foreground traffic polling, de-duplicating notification updates, and caching decoded core status payloads.
+            - Lower native tunnel overhead in release builds by running `hev-socks5-tunnel` at `warn` log level while keeping `debug` logs for debug builds.
+            - Refactor shared runtime/formatting helpers to simplify the Kotlin codebase and improve maintainability.
