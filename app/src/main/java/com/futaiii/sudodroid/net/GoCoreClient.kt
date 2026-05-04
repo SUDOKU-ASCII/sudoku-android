@@ -40,6 +40,9 @@ object GoCoreClient {
         private val stopMethod = mobileClass?.getMethod("stop")
         private val trafficMethod = mobileClass?.getMethod("getTrafficStatsJson")
         private val resetTrafficMethod = mobileClass?.getMethod("resetTrafficStats")
+        private val probeLatencyMethod = mobileClass?.let {
+            runCatching { it.getMethod("probeLatencyJson", String::class.java) }.getOrNull()
+        }
         private val startReverseForwarderMethod = mobileClass?.getMethod(
             "startReverseForwarder",
             String::class.java,
@@ -81,6 +84,16 @@ object GoCoreClient {
                 resetTrafficMethod?.invoke(null)
             } catch (e: Throwable) {
                 Log.w(TAG, "Failed to reset Go core traffic stats", e)
+            }
+        }
+
+        fun probeLatencyJson(configJson: String): String {
+            val method = probeLatencyMethod
+                ?: error("Sudoku core AAR missing latency probe API; rebuild app/libs/sudoku.aar")
+            return try {
+                method.invoke(null, configJson) as String
+            } catch (e: java.lang.reflect.InvocationTargetException) {
+                throw e.targetException ?: e
             }
         }
 
@@ -154,6 +167,12 @@ object GoCoreClient {
     fun resetTrafficStats() {
         MobileBinding.resetTrafficStats()
         invalidateTrafficStatsCache()
+    }
+
+    fun probeLatency(node: NodeConfig, globalProxySettings: GlobalProxySettings = GlobalProxySettings()): LatencyProbeResult {
+        val configJson = buildConfigJson(node, globalProxySettings)
+        val raw = MobileBinding.probeLatencyJson(configJson)
+        return json.decodeFromString<LatencyProbeResult>(raw)
     }
 
     fun startReverseForwarder(listenAddr: String, dialUrl: String, insecure: Boolean) {
@@ -288,6 +307,15 @@ object GoCoreClient {
         @SerialName("direct_rx") val directRx: Long = 0,
         @SerialName("proxy_tx") val proxyTx: Long = 0,
         @SerialName("proxy_rx") val proxyRx: Long = 0
+    )
+
+    @Serializable
+    data class LatencyProbeResult(
+        @SerialName("latency_ms") val latencyMs: Long = -1,
+        @SerialName("status_code") val statusCode: Int = 0,
+        @SerialName("connect_ok") val connectOk: Boolean = false,
+        @SerialName("checked_at_unix") val checkedAtUnix: Long = 0,
+        val error: String = ""
     )
 
     @Serializable

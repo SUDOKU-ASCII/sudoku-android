@@ -199,23 +199,10 @@ class AppViewModel(
 
     fun pingNode(node: NodeConfig) {
         viewModelScope.launch(Dispatchers.IO) {
-            val start = System.nanoTime()
             val latency = kotlin.runCatching {
                 val current = state.value
-                val shouldUseProxy = (current.isVpnRunning || current.isProxyOnlyRunning) && current.activeId == node.id
-                val proxy = if (shouldUseProxy) {
-                    java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", node.localPort))
-                } else {
-                    java.net.Proxy.NO_PROXY
-                }
-
-                val socket = java.net.Socket(proxy)
-                socket.tcpNoDelay = true
-                // Connect to the server port. If using proxy, this tests Client -> Proxy -> Server.
-                // If direct, this tests Client -> Server.
-                socket.connect(java.net.InetSocketAddress(node.host.trim().removeSurrounding("[", "]"), node.port), 5_000)
-                socket.close()
-                kotlin.math.abs((System.nanoTime() - start) / 1_000_000L)
+                val result = GoCoreClient.probeLatency(node, current.globalProxySettings)
+                result.latencyMs.takeIf { result.connectOk && it >= 0 }
             }.getOrNull()
             latencyMap.value = latencyMap.value.toMutableMap().apply { put(node.id, latency) }
         }

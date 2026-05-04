@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.2
+          SUDOKU_REF: v0.4.3
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -378,6 +378,7 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Reduce idle battery drain by throttling foreground traffic polling, de-duplicating notification updates, and caching decoded core status payloads.
-            - Lower native tunnel overhead in release builds by running `hev-socks5-tunnel` at `warn` log level while keeping `debug` logs for debug builds.
-            - Refactor shared runtime/formatting helpers to simplify the Kotlin codebase and improve maintainability.
+            - Upgrade the bundled Sudoku core to upstream `v0.4.3`.
+            - Node latency probes now use the same real Sudoku tunnel flow as the desktop app: protocol dial, TLS handshake, and `GET /generate_204`.
+            - Android latency checks now report the actual connection result from the Go core instead of a local TCP-only connect.
+            - Keep the mobile AAR binding aligned with the upstream desktop probe behavior and preserve backward-compatible startup paths.

@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -18,13 +19,27 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coder/websocket"
+	sudokuapis "github.com/SUDOKU-ASCII/sudoku/apis"
 	"github.com/SUDOKU-ASCII/sudoku/internal/app"
 	"github.com/SUDOKU-ASCII/sudoku/internal/config"
 	"github.com/SUDOKU-ASCII/sudoku/internal/tunnel"
+	sudokukey "github.com/SUDOKU-ASCII/sudoku/pkg/crypto"
+	sudokutable "github.com/SUDOKU-ASCII/sudoku/pkg/obfs/sudoku"
+	"github.com/coder/websocket"
 )
 
 const sudokuTCPSubprotocol = "sudoku-tcp-v1"
+const latencyProbeTarget = "i.ytimg.com:443"
+const latencyProbeServerName = "i.ytimg.com"
+const latencyProbePath = "/generate_204"
+
+type latencyProbeResult struct {
+	LatencyMs     int64  `json:"latency_ms"`
+	StatusCode    int    `json:"status_code"`
+	ConnectOK     bool   `json:"connect_ok"`
+	CheckedAtUnix int64  `json:"checked_at_unix"`
+	Error         string `json:"error"`
+}
 
 type reverseForwardStatus struct {
 	Running    bool   `json:"running"`
@@ -49,6 +64,137 @@ var (
 	reverseStatus   reverseForwardStatus
 	coreLocalPort   int32
 )
+
+func normalizeClientProbeConfig(cfg *config.Config) error {
+	if cfg == nil {
+		return fmt.Errorf("nil config")
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.HTTPMask.Mode)) {
+	case "xhttp":
+		cfg.HTTPMask.Mode = "stream"
+	case "pht":
+		cfg.HTTPMask.Mode = "poll"
+	}
+	return cfg.Finalize()
+}
+
+func tableSeedKey(key string) string {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		return ""
+	}
+	pubKeyPoint, err := sudokukey.RecoverPublicKey(trimmed)
+	if err != nil {
+		return trimmed
+	}
+	return sudokukey.EncodePoint(pubKeyPoint)
+}
+
+func buildLatencyProtocolConfig(cfg *config.Config) (*sudokuapis.ProtocolConfig, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("nil config")
+	}
+	seedKey := tableSeedKey(cfg.Key)
+	proto := sudokuapis.DefaultConfig()
+	proto.ServerAddress = strings.TrimSpace(cfg.ServerAddress)
+	proto.TargetAddress = latencyProbeTarget
+	proto.Key = strings.TrimSpace(cfg.Key)
+	proto.AEADMethod = strings.TrimSpace(cfg.AEAD)
+	proto.PaddingMin = cfg.PaddingMin
+	proto.PaddingMax = cfg.PaddingMax
+	proto.EnablePureDownlink = cfg.EnablePureDownlink
+	proto.DisableHTTPMask = cfg.HTTPMask.Disable
+	proto.HTTPMaskMode = strings.TrimSpace(cfg.HTTPMask.Mode)
+	proto.HTTPMaskTLSEnabled = cfg.HTTPMask.TLS
+	proto.HTTPMaskHost = strings.TrimSpace(cfg.HTTPMask.Host)
+	proto.HTTPMaskPathRoot = strings.TrimSpace(cfg.HTTPMask.PathRoot)
+	proto.HTTPMaskMultiplex = strings.TrimSpace(cfg.HTTPMask.Multiplex)
+
+	patterns := cfg.CustomTables
+	if len(patterns) == 0 && strings.TrimSpace(cfg.CustomTable) != "" {
+		patterns = []string{cfg.CustomTable}
+	}
+	if len(patterns) == 0 {
+		patterns = []string{""}
+	}
+	tableSet, err := sudokutable.NewTableSet(seedKey, cfg.ASCII, patterns)
+	if err != nil {
+		return nil, err
+	}
+	proto.Tables = tableSet.Candidates()
+	if err := proto.ValidateClient(); err != nil {
+		return nil, err
+	}
+	return proto, nil
+}
+
+func probeLatency(jsonConfig string) latencyProbeResult {
+	result := latencyProbeResult{
+		LatencyMs:     -1,
+		CheckedAtUnix: time.Now().UnixMilli(),
+	}
+	start := time.Now()
+
+	var cfg config.Config
+	if err := json.Unmarshal([]byte(jsonConfig), &cfg); err != nil {
+		result.Error = fmt.Sprintf("parse config: %v", err)
+		return result
+	}
+	if err := normalizeClientProbeConfig(&cfg); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	proto, err := buildLatencyProtocolConfig(&cfg)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := sudokuapis.Dial(ctx, proto)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	defer conn.Close()
+
+	tlsConn := tls.Client(conn, &tls.Config{ServerName: latencyProbeServerName})
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	if _, err := io.WriteString(tlsConn, "GET "+latencyProbePath+" HTTP/1.1\r\nHost: "+latencyProbeServerName+"\r\nConnection: close\r\n\r\n"); err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	line, err := bufio.NewReader(tlsConn).ReadString('\n')
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+
+	parts := strings.Fields(strings.TrimSpace(line))
+	if len(parts) >= 2 {
+		result.StatusCode, _ = strconv.Atoi(parts[1])
+	}
+	result.ConnectOK = result.StatusCode >= 200 && result.StatusCode < 500
+	result.LatencyMs = time.Since(start).Milliseconds()
+	result.CheckedAtUnix = time.Now().UnixMilli()
+	if !result.ConnectOK {
+		result.Error = fmt.Sprintf("unexpected HTTP status %d", result.StatusCode)
+	}
+	return result
+}
+
+func ProbeLatencyJson(jsonConfig string) string {
+	result := probeLatency(jsonConfig)
+	b, err := json.Marshal(result)
+	if err != nil {
+		return `{"latency_ms":-1,"status_code":0,"connect_ok":false,"error":"marshal latency result failed"}`
+	}
+	return string(b)
+}
 
 func dialSocks5(ctx context.Context, proxyAddr, targetAddr string) (net.Conn, error) {
 	proxyAddr = strings.TrimSpace(proxyAddr)
