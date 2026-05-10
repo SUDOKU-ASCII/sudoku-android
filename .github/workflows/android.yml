@@ -55,7 +55,7 @@ jobs:
             git clone --recursive https://github.com/heiher/hev-socks5-tunnel third_party/hev-socks5-tunnel
           fi
           cd third_party/hev-socks5-tunnel
-          git checkout 4d6c334dbfb68a79d1970c2744e62d09f71df12f
+          git checkout 00c7eb9ad7ca381b0f1fee880abc1077fe9b93be
           git submodule update --init --recursive
 
 
@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.3
+          SUDOKU_REF: v0.4.4
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -378,7 +378,5 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Upgrade the bundled Sudoku core to upstream `v0.4.3`.
-            - Node latency probes now use the same real Sudoku tunnel flow as the desktop app: protocol dial, TLS handshake, and `GET /generate_204`.
-            - Android latency checks now report the actual connection result from the Go core instead of a local TCP-only connect.
-            - Keep the mobile AAR binding aligned with the upstream desktop probe behavior and preserve backward-compatible startup paths.
+            - Upgrade the bundled Sudoku core to upstream `v0.4.4`.
+            - Upgrade the bundled `hev-socks5-tunnel` native tunnel to `2.15.0`.
