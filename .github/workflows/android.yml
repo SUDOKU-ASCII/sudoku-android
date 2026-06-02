@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.4
+          SUDOKU_REF: v0.4.6
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -378,5 +378,5 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Upgrade the bundled Sudoku core to upstream `v0.4.4`.
+            - Upgrade the bundled Sudoku core to upstream `v0.4.6`.
             - Upgrade the bundled `hev-socks5-tunnel` native tunnel to `2.15.0`.
