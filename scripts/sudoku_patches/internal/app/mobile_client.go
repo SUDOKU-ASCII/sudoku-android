@@ -13,9 +13,12 @@ import (
 )
 
 type MobileInstance struct {
-	ln     net.Listener
-	cancel context.CancelFunc
-	done   chan struct{}
+	ln        net.Listener
+	cancel    context.CancelFunc
+	done      chan struct{}
+	muxDialer *tunnel.MuxDialer
+	muxCancel context.CancelFunc
+	muxDone   chan struct{}
 }
 
 func (m *MobileInstance) Stop() {
@@ -25,8 +28,17 @@ func (m *MobileInstance) Stop() {
 	if m.ln != nil {
 		m.ln.Close()
 	}
+	if m.muxCancel != nil {
+		m.muxCancel()
+	}
+	if m.muxDialer != nil {
+		_ = m.muxDialer.Close()
+	}
 	if m.done != nil {
 		<-m.done
+	}
+	if m.muxDone != nil {
+		<-m.muxDone
 	}
 }
 
@@ -53,9 +65,11 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 	}
 
 	var dialer tunnel.Dialer
-	if cfg.HTTPMaskSessionMuxEnabled() {
-		dialer = &tunnel.MuxDialer{BaseDialer: baseDialer}
-		log.Printf("Enabled HTTPMask session mux (single tunnel, multi-target)")
+	var muxDialer *tunnel.MuxDialer
+	if cfg.SessionMuxEnabled() {
+		muxDialer = &tunnel.MuxDialer{BaseDialer: baseDialer}
+		dialer = muxDialer
+		log.Printf("Enabled session mux (single tunnel, multi-target)")
 	} else {
 		dialer = &tunnel.StandardDialer{BaseDialer: baseDialer}
 	}
@@ -76,6 +90,21 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	var muxCancel context.CancelFunc
+	var muxDone chan struct{}
+	if muxDialer != nil {
+		var muxCtx context.Context
+		muxCtx, muxCancel = context.WithCancel(context.Background())
+		muxDone = make(chan struct{})
+		go func() {
+			defer close(muxDone)
+			muxDialer.Maintain(muxCtx, func(err error) {
+				if err != nil {
+					log.Printf("Mux warm session unavailable: %v", err)
+				}
+			})
+		}()
+	}
 
 	var primaryTable *sudoku.Table
 	if len(tables) > 0 {
@@ -109,5 +138,12 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 		}
 	}()
 
-	return &MobileInstance{ln: ln, cancel: cancel, done: done}, nil
+	return &MobileInstance{
+		ln:        ln,
+		cancel:    cancel,
+		done:      done,
+		muxDialer: muxDialer,
+		muxCancel: muxCancel,
+		muxDone:   muxDone,
+	}, nil
 }

@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class NodeUi(
     val node: NodeConfig,
@@ -57,6 +59,7 @@ class AppViewModel(
     private val reverseForwardBusy = MutableStateFlow(false)
     private val error = MutableStateFlow<String?>(null)
     private var reverseForwardStatusJob: Job? = null
+    private val globalSettingsMutex = Mutex()
 
     init {
         viewModelScope.launch {
@@ -231,26 +234,50 @@ class AppViewModel(
         }
     }
 
-    fun updateGlobalProxySettings(
+    fun updateProxyMode(
         proxyMode: ProxyMode,
-        ruleUrlsText: String
+        onSaved: (() -> Unit)? = null
     ) {
         viewModelScope.launch {
-            val sanitizedRuleUrls = ruleUrlsText.lines()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-
-            val finalRuleUrls = if (proxyMode == ProxyMode.PAC) {
-                if (sanitizedRuleUrls.isEmpty()) DEFAULT_PAC_RULE_URLS else sanitizedRuleUrls
-            } else {
-                emptyList()
+            runCatching {
+                globalSettingsMutex.withLock {
+                    val current = repo.globalProxySettings.first()
+                    repo.saveGlobalProxySettings(
+                        current.copy(
+                            proxyMode = proxyMode,
+                            ruleUrls = current.ruleUrls.ifEmpty { DEFAULT_PAC_RULE_URLS }
+                        )
+                    )
+                }
+            }.onSuccess {
+                onSaved?.invoke()
+            }.onFailure {
+                error.value = it.message ?: "Failed to save global network settings"
             }
-            repo.saveGlobalProxySettings(
-                GlobalProxySettings(
-                    proxyMode = proxyMode,
-                    ruleUrls = finalRuleUrls
-                )
-            )
+        }
+    }
+
+    fun savePacRules(
+        ruleUrlsText: String,
+        onSaved: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                globalSettingsMutex.withLock {
+                    val sanitizedRuleUrls = ruleUrlsText.lines()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .ifEmpty { DEFAULT_PAC_RULE_URLS }
+                    val current = repo.globalProxySettings.first()
+                    repo.saveGlobalProxySettings(
+                        current.copy(ruleUrls = sanitizedRuleUrls)
+                    )
+                }
+            }.onSuccess {
+                onSaved?.invoke()
+            }.onFailure {
+                error.value = it.message ?: "Failed to save PAC rules"
+            }
         }
     }
 

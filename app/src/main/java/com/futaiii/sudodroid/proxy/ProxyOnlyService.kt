@@ -83,6 +83,23 @@ class ProxyOnlyService : Service() {
                 return START_STICKY
             }
 
+            ACTION_RELOAD_CONFIG -> {
+                val node = activeNode
+                if (!coreRunning || node == null) {
+                    Log.w(TAG, "Reload requested but proxy-only mode is not running")
+                    return START_STICKY
+                }
+                scope.launch {
+                    try {
+                        startCore(node)
+                        Log.i(TAG, "Reloaded core configuration")
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Failed to reload core configuration", e)
+                    }
+                }
+                return START_STICKY
+            }
+
             else -> {
                 if (SudokuVpnService.isRunning) {
                     Log.w(TAG, "VPN is running; proxy-only mode cannot start")
@@ -250,6 +267,7 @@ class ProxyOnlyService : Service() {
         const val EXTRA_NODE_ID = "nodeId"
         const val ACTION_STOP = "com.futaiii.sudodroid.proxy.STOP"
         const val ACTION_SWITCH_NODE = "com.futaiii.sudodroid.proxy.SWITCH_NODE"
+        const val ACTION_RELOAD_CONFIG = "com.futaiii.sudodroid.proxy.RELOAD_CONFIG"
         const val EXTRA_SKIP_STOP_CORE = "com.futaiii.sudodroid.proxy.SKIP_STOP_CORE"
 
         private const val CHANNEL_ID = "sudoku_proxy_only"
@@ -260,6 +278,8 @@ class ProxyOnlyService : Service() {
 
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow
+        val isRunning: Boolean
+            get() = statusFlow.value
 
         private val activeNodeIdFlow = MutableStateFlow<String?>(null)
         val activeNodeId: StateFlow<String?> = activeNodeIdFlow

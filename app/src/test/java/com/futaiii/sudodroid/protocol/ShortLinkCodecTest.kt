@@ -2,6 +2,7 @@ package com.futaiii.sudodroid.protocol
 
 import com.futaiii.sudodroid.data.AeadMode
 import com.futaiii.sudodroid.data.AsciiMode
+import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -114,6 +115,22 @@ class ShortLinkCodecTest {
 
             assertEquals(mode, decoded.asciiMode)
         }
+    }
+
+    @Test
+    fun toLink_preservesMuxWhenHttpMaskIsDisabled() {
+        val node = NodeConfig(
+            host = "example.com",
+            port = 443,
+            key = "test-key",
+            disableHttpMask = true,
+            httpMaskMultiplex = HttpMaskMultiplex.ON
+        )
+
+        val decoded = ShortLinkCodec.fromLink(ShortLinkCodec.toLink(node))
+
+        assertEquals(true, decoded.disableHttpMask)
+        assertEquals(HttpMaskMultiplex.ON, decoded.httpMaskMultiplex)
     }
 }
 

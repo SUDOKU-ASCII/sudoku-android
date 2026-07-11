@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,18 +14,17 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	sudokuapis "github.com/SUDOKU-ASCII/sudoku/apis"
 	"github.com/SUDOKU-ASCII/sudoku/internal/app"
 	"github.com/SUDOKU-ASCII/sudoku/internal/config"
 	"github.com/SUDOKU-ASCII/sudoku/internal/tunnel"
 	sudokukey "github.com/SUDOKU-ASCII/sudoku/pkg/crypto"
-	sudokutable "github.com/SUDOKU-ASCII/sudoku/pkg/obfs/sudoku"
 	"github.com/coder/websocket"
 )
 
@@ -32,6 +32,7 @@ const sudokuTCPSubprotocol = "sudoku-tcp-v1"
 const latencyProbeTarget = "i.ytimg.com:443"
 const latencyProbeServerName = "i.ytimg.com"
 const latencyProbePath = "/generate_204"
+const ruleCacheDirEnv = "SUDOKU_RULE_CACHE_DIR"
 
 type latencyProbeResult struct {
 	LatencyMs     int64  `json:"latency_ms"`
@@ -78,54 +79,31 @@ func normalizeClientProbeConfig(cfg *config.Config) error {
 	return cfg.Finalize()
 }
 
-func tableSeedKey(key string) string {
-	trimmed := strings.TrimSpace(key)
-	if trimmed == "" {
-		return ""
-	}
-	pubKeyPoint, err := sudokukey.RecoverPublicKey(trimmed)
-	if err != nil {
-		return trimmed
-	}
-	return sudokukey.EncodePoint(pubKeyPoint)
-}
-
-func buildLatencyProtocolConfig(cfg *config.Config) (*sudokuapis.ProtocolConfig, error) {
+func buildLatencyDialer(cfg *config.Config) (*tunnel.StandardDialer, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("nil config")
 	}
-	seedKey := tableSeedKey(cfg.Key)
-	proto := sudokuapis.DefaultConfig()
-	proto.ServerAddress = strings.TrimSpace(cfg.ServerAddress)
-	proto.TargetAddress = latencyProbeTarget
-	proto.Key = strings.TrimSpace(cfg.Key)
-	proto.AEADMethod = strings.TrimSpace(cfg.AEAD)
-	proto.PaddingMin = cfg.PaddingMin
-	proto.PaddingMax = cfg.PaddingMax
-	proto.EnablePureDownlink = cfg.EnablePureDownlink
-	proto.DisableHTTPMask = cfg.HTTPMask.Disable
-	proto.HTTPMaskMode = strings.TrimSpace(cfg.HTTPMask.Mode)
-	proto.HTTPMaskTLSEnabled = cfg.HTTPMask.TLS
-	proto.HTTPMaskHost = strings.TrimSpace(cfg.HTTPMask.Host)
-	proto.HTTPMaskPathRoot = strings.TrimSpace(cfg.HTTPMask.PathRoot)
-	proto.HTTPMaskMultiplex = strings.TrimSpace(cfg.HTTPMask.Multiplex)
 
-	patterns := cfg.CustomTables
-	if len(patterns) == 0 && strings.TrimSpace(cfg.CustomTable) != "" {
-		patterns = []string{cfg.CustomTable}
+	var privateKeyBytes []byte
+	if pubKeyPoint, err := sudokukey.RecoverPublicKey(cfg.Key); err == nil {
+		privateKeyBytes, err = hex.DecodeString(cfg.Key)
+		if err != nil {
+			return nil, fmt.Errorf("decode key: %w", err)
+		}
+		cfg.Key = sudokukey.EncodePoint(pubKeyPoint)
 	}
-	if len(patterns) == 0 {
-		patterns = []string{""}
-	}
-	tableSet, err := sudokutable.NewTableSet(seedKey, cfg.ASCII, patterns)
+
+	tables, err := app.BuildTables(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build tables: %w", err)
 	}
-	proto.Tables = tableSet.Candidates()
-	if err := proto.ValidateClient(); err != nil {
-		return nil, err
-	}
-	return proto, nil
+	return &tunnel.StandardDialer{
+		BaseDialer: tunnel.BaseDialer{
+			Config:     cfg,
+			Tables:     tables,
+			PrivateKey: privateKeyBytes,
+		},
+	}, nil
 }
 
 func probeLatency(jsonConfig string) latencyProbeResult {
@@ -144,21 +122,21 @@ func probeLatency(jsonConfig string) latencyProbeResult {
 		result.Error = err.Error()
 		return result
 	}
-	proto, err := buildLatencyProtocolConfig(&cfg)
+	dialer, err := buildLatencyDialer(&cfg)
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	conn, err := sudokuapis.Dial(ctx, proto)
+	conn, err := dialer.Dial(latencyProbeTarget)
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
 	defer conn.Close()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	tlsConn := tls.Client(conn, &tls.Config{ServerName: latencyProbeServerName})
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		result.Error = err.Error()
@@ -194,6 +172,20 @@ func ProbeLatencyJson(jsonConfig string) string {
 		return `{"latency_ms":-1,"status_code":0,"connect_ok":false,"error":"marshal latency result failed"}`
 	}
 	return string(b)
+}
+
+func SetRuleCacheDir(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("rule cache directory is empty")
+	}
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return fmt.Errorf("create rule cache directory: %w", err)
+	}
+	if err := os.Setenv(ruleCacheDirEnv, path); err != nil {
+		return fmt.Errorf("set rule cache directory: %w", err)
+	}
+	return nil
 }
 
 func dialSocks5(ctx context.Context, proxyAddr, targetAddr string) (net.Conn, error) {

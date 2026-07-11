@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Http
@@ -146,7 +147,8 @@ fun AppRoot(
     onToggleVpn: (Boolean) -> Unit,
     onSwitchNodeWhileRunning: (NodeConfig) -> Unit,
     onToggleProxyOnly: (Boolean) -> Unit,
-    onSwitchNodeWhileProxyOnlyRunning: (NodeConfig) -> Unit
+    onSwitchNodeWhileProxyOnlyRunning: (NodeConfig) -> Unit,
+    onRestartRunningProxy: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -292,31 +294,41 @@ fun AppRoot(
                         proxyMode = globalProxyMode,
                         ruleUrls = globalRuleUrlsText,
                         onProxyModeChange = { mode ->
-                            globalProxyMode = mode
-                            if (mode == ProxyMode.PAC && globalRuleUrlsText.lines().none { it.isNotBlank() }) {
-                                globalRuleUrlsText = defaultPacRuleUrlsText
+                            if (mode != globalProxyMode) {
+                                globalProxyMode = mode
+                                if (mode == ProxyMode.PAC && globalRuleUrlsText.lines().none { it.isNotBlank() }) {
+                                    globalRuleUrlsText = defaultPacRuleUrlsText
+                                }
+                                viewModel.updateProxyMode(
+                                    proxyMode = mode,
+                                    onSaved = onRestartRunningProxy
+                                )
                             }
                         },
                         onRuleUrlsChange = { globalRuleUrlsText = it },
                         onSetDefaultPacRules = {
                             globalProxyMode = ProxyMode.PAC
                             globalRuleUrlsText = defaultPacRuleUrlsText
-                            viewModel.updateGlobalProxySettings(
-                                proxyMode = ProxyMode.PAC,
-                                ruleUrlsText = defaultPacRuleUrlsText
+                            viewModel.savePacRules(
+                                ruleUrlsText = defaultPacRuleUrlsText,
+                                onSaved = {
+                                    onRestartRunningProxy()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Default PAC rules applied")
+                                    }
+                                }
                             )
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Default PAC rules applied")
-                            }
                         },
                         onSave = {
-                            viewModel.updateGlobalProxySettings(
-                                proxyMode = globalProxyMode,
-                                ruleUrlsText = globalRuleUrlsText
+                            viewModel.savePacRules(
+                                ruleUrlsText = globalRuleUrlsText,
+                                onSaved = {
+                                    onRestartRunningProxy()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("PAC rules saved")
+                                    }
+                                }
                             )
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Global network settings saved")
-                            }
                         }
                     )
 
@@ -697,13 +709,12 @@ private fun GlobalSettingsCard(
                     Spacer(Modifier.width(8.dp))
                     Text("Add Rule")
                 }
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                FilledTonalButton(onClick = onSave) {
-                    Icon(Icons.Outlined.Tune, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Save Global Settings")
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    FilledTonalButton(onClick = onSave) {
+                        Icon(Icons.Default.Save, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Save PAC Rules")
+                    }
                 }
             }
         }
@@ -1270,11 +1281,6 @@ private fun NodeEditorDialog(
                     item {
                         SectionCard(title = "HTTP Mask") {
                             val httpMaskEnabled = !disableHttpMask
-                            LaunchedEffect(httpMaskEnabled) {
-                                if (!httpMaskEnabled) {
-                                    httpMaskMultiplex = HttpMaskMultiplex.OFF
-                                }
-                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1346,14 +1352,16 @@ private fun NodeEditorDialog(
                                 enabled = tunnelOptionsEnabled,
                                 singleLine = true
                             )
-                            Spacer(Modifier.height(12.dp))
-                            Text("HTTP multiplex (mux)", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                    item {
+                        SectionCard(title = "Multiplex") {
+                            Text("Tunnel multiplex (mux)", style = MaterialTheme.typography.labelMedium)
                             SingleChoiceSegmentedButtonRow {
                                 HttpMaskMultiplex.entries.forEachIndexed { index: Int, mode: HttpMaskMultiplex ->
                                     SegmentedButton(
                                         selected = httpMaskMultiplex == mode,
                                         onClick = { httpMaskMultiplex = mode },
-                                        enabled = tunnelOptionsEnabled,
                                         shape = SegmentedButtonDefaults.itemShape(index, HttpMaskMultiplex.entries.size),
                                         modifier = Modifier.height(40.dp),
                                         label = { Text(mode.label) }
@@ -1500,11 +1508,6 @@ private fun buildNodeConfig(
     if (key.trim().isEmpty()) throw IllegalArgumentException("Key cannot be blank")
     val sanitizedHttpMaskHost = httpMaskHost.trim()
     val sanitizedHttpMaskPathRoot = NodeInputValidator.requireHttpMaskPathRoot(httpMaskPathRoot)
-    val sanitizedHttpMaskMultiplex = if (disableHttpMask) {
-        HttpMaskMultiplex.OFF
-    } else {
-        httpMaskMultiplex
-    }
 
     val customTables = NodeInputValidator.parseCustomTablePatterns(customTablesText)
     customTables.forEach { NodeInputValidator.requireValidCustomTablePattern(it) }
@@ -1526,7 +1529,7 @@ private fun buildNodeConfig(
         httpMaskTls = httpMaskTls,
         httpMaskHost = sanitizedHttpMaskHost,
         httpMaskPathRoot = sanitizedHttpMaskPathRoot,
-        httpMaskMultiplex = sanitizedHttpMaskMultiplex,
+        httpMaskMultiplex = httpMaskMultiplex,
         customTable = customTables.firstOrNull().orEmpty(),
         customTables = customTables,
         createdAt = initial?.createdAt ?: System.currentTimeMillis()

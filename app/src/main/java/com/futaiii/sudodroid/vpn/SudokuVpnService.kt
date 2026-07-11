@@ -97,6 +97,27 @@ class SudokuVpnService : VpnService() {
                     START_STICKY
                 }
 
+                ACTION_RELOAD_CONFIG -> {
+                    if (!tunnelStarted) {
+                        Log.w(TAG, "Reload requested but VPN is not running; ignoring")
+                        return START_STICKY
+                    }
+                    val node = activeNode
+                    if (node == null) {
+                        Log.w(TAG, "Reload requested without an active node; ignoring")
+                        return START_STICKY
+                    }
+                    scope.launch {
+                        try {
+                            startCore(node)
+                            Log.i(TAG, "Reloaded core configuration")
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "Failed to reload core configuration", e)
+                        }
+                    }
+                    START_STICKY
+                }
+
                 else -> {
                     if (tunnelStarted) {
                         Log.i(TAG, "VPN already running, ignoring duplicate start")
@@ -393,6 +414,7 @@ class SudokuVpnService : VpnService() {
         const val EXTRA_NODE_ID = "nodeId"
         const val ACTION_STOP = "com.futaiii.sudodroid.vpn.STOP"
         const val ACTION_SWITCH_NODE = "com.futaiii.sudodroid.vpn.SWITCH_NODE"
+        const val ACTION_RELOAD_CONFIG = "com.futaiii.sudodroid.vpn.RELOAD_CONFIG"
         private const val CHANNEL_ID = "sudoku_vpn"
         private const val NOTI_ID = 1
         private const val TAG = "SudokuVpnService"

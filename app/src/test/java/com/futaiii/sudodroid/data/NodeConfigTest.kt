@@ -5,7 +5,7 @@ import org.junit.Test
 
 class NodeConfigTest {
     @Test
-    fun defaultPacRuleUrls_matchSudokuCoreV041Defaults() {
+    fun defaultPacRuleUrls_matchSudokuCoreDefaults() {
         assertEquals(
             listOf(
                 "https://fastly.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/ChinaMaxNoIP/ChinaMaxNoIP.list",

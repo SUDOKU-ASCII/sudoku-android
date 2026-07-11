@@ -2,13 +2,13 @@ package com.futaiii.sudodroid.net
 
 import android.util.Log
 import com.futaiii.sudodroid.data.GlobalProxySettings
-import com.futaiii.sudodroid.data.HttpMaskMultiplex
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 
 object GoCoreClient {
     private const val TAG = "GoCoreClient"
@@ -40,6 +40,9 @@ object GoCoreClient {
         private val stopMethod = mobileClass?.getMethod("stop")
         private val trafficMethod = mobileClass?.getMethod("getTrafficStatsJson")
         private val resetTrafficMethod = mobileClass?.getMethod("resetTrafficStats")
+        private val setRuleCacheDirMethod = mobileClass?.let {
+            runCatching { it.getMethod("setRuleCacheDir", String::class.java) }.getOrNull()
+        }
         private val probeLatencyMethod = mobileClass?.let {
             runCatching { it.getMethod("probeLatencyJson", String::class.java) }.getOrNull()
         }
@@ -87,6 +90,16 @@ object GoCoreClient {
             }
         }
 
+        fun setRuleCacheDir(path: String) {
+            val method = setRuleCacheDirMethod
+                ?: error("Sudoku core AAR missing rule cache API; rebuild app/libs/sudoku.aar")
+            try {
+                method.invoke(null, path)
+            } catch (e: java.lang.reflect.InvocationTargetException) {
+                throw e.targetException ?: e
+            }
+        }
+
         fun probeLatencyJson(configJson: String): String {
             val method = probeLatencyMethod
                 ?: error("Sudoku core AAR missing latency probe API; rebuild app/libs/sudoku.aar")
@@ -127,6 +140,12 @@ object GoCoreClient {
     }
 
     private inline fun <T> withLifecycleLock(block: () -> T): T = synchronized(lifecycleLock) { block() }
+
+    fun initialize(cacheDir: File) {
+        val ruleCacheDir = File(cacheDir, "sudoku/geodata")
+        runCatching { MobileBinding.setRuleCacheDir(ruleCacheDir.absolutePath) }
+            .onFailure { Log.e(TAG, "Failed to configure Sudoku rule cache", it) }
+    }
 
     fun start(configJson: String) {
         withLifecycleLock {
@@ -239,19 +258,14 @@ object GoCoreClient {
         val httpMaskHost = node.httpMaskHost.trim().ifEmpty {
             if (!node.disableHttpMask && !isLiteralAddress(normalizedHost)) normalizedHost else ""
         }
-        val httpMaskMultiplex = if (node.disableHttpMask) {
-            HttpMaskMultiplex.OFF.wireValue
-        } else {
-            node.httpMaskMultiplex.wireValue
-        }
+        val multiplex = node.httpMaskMultiplex.wireValue
         val httpMaskPathRoot = node.httpMaskPathRoot.trim()
         val httpMask = GoHttpMaskConfig(
             disable = node.disableHttpMask,
             mode = node.httpMaskMode.wireValue,
             tls = node.httpMaskTls,
             host = httpMaskHost,
-            pathRoot = httpMaskPathRoot,
-            multiplex = httpMaskMultiplex
+            pathRoot = httpMaskPathRoot
         )
         val config = GoCoreConfig(
             localPort = node.localPort,
@@ -265,6 +279,7 @@ object GoCoreClient {
             customTable = primaryCustomTable.orEmpty(),
             customTables = customTables,
             enablePureDownlink = node.enablePureDownlink,
+            multiplex = multiplex,
             httpMask = httpMask,
             proxyMode = proxyMode
         )
@@ -287,6 +302,7 @@ object GoCoreClient {
         @SerialName("custom_table") val customTable: String = "",
         @SerialName("custom_tables") val customTables: List<String> = emptyList(),
         @SerialName("enable_pure_downlink") val enablePureDownlink: Boolean = true,
+        val multiplex: String = "off",
         @SerialName("httpmask") val httpMask: GoHttpMaskConfig = GoHttpMaskConfig(),
         @SerialName("proxy_mode") val proxyMode: String
     )
@@ -297,8 +313,7 @@ object GoCoreClient {
         val mode: String = "auto",
         val tls: Boolean = false,
         val host: String = "",
-        @SerialName("path_root") val pathRoot: String = "",
-        val multiplex: String = "off"
+        @SerialName("path_root") val pathRoot: String = ""
     )
 
     @Serializable

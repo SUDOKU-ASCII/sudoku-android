@@ -35,7 +35,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: "1.26.4"
 
       - name: Install gomobile
         run: |
@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.6
+          SUDOKU_REF: v0.4.8
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -378,5 +378,9 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Upgrade the bundled Sudoku core to upstream `v0.4.6`.
-            - Upgrade the bundled `hev-socks5-tunnel` native tunnel to `2.15.0`.
+            - Upgrade the bundled Sudoku core to upstream `v0.4.8` and build it with Go `1.26.4`.
+            - Support `-` and `_` prefixed PAC rule URLs that force matching destinations through the proxy.
+            - Persist successfully downloaded URL rules and fall back to the last valid cache when startup networking is unavailable.
+            - Move `multiplex` to the top-level core configuration while preserving short-link compatibility and raw TCP mux support.
+            - Save Global, Direct, and PAC mode changes immediately, then restart the active VPN or proxy-only core to apply them.
+            - Keep the Save action dedicated to PAC rule edits.

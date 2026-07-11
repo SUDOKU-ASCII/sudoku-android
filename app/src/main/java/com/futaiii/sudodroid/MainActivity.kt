@@ -52,6 +52,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onSwitchNodeWhileProxyOnlyRunning = { node ->
                             switchProxyNode(node)
+                        },
+                        onRestartRunningProxy = {
+                            restartRunningProxy()
                         }
                     )
                 }
@@ -136,6 +139,22 @@ class MainActivity : ComponentActivity() {
             putExtra(ProxyOnlyService.EXTRA_NODE_ID, node.id)
         }
         startService(intent)
+    }
+
+    private fun restartRunningProxy() {
+        when {
+            SudokuVpnService.isRunning -> {
+                startService(Intent(this, SudokuVpnService::class.java).apply {
+                    action = SudokuVpnService.ACTION_RELOAD_CONFIG
+                })
+            }
+
+            ProxyOnlyService.isRunning -> {
+                startService(Intent(this, ProxyOnlyService::class.java).apply {
+                    action = ProxyOnlyService.ACTION_RELOAD_CONFIG
+                })
+            }
+        }
     }
 
     companion object {

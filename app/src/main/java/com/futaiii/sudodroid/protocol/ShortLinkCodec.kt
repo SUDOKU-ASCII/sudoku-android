@@ -63,11 +63,7 @@ object ShortLinkCodec {
         val httpMaskMode = HttpMaskMode.fromWire(payload.httpMaskMode)
         val httpMaskHost = payload.httpMaskHost?.trim().orEmpty()
         val httpMaskPathRoot = NodeInputValidator.normalizeHttpMaskPathRoot(payload.httpMaskPath)
-        val httpMaskMultiplex = if (payload.disableHttpMask) {
-            HttpMaskMultiplex.OFF
-        } else {
-            HttpMaskMultiplex.fromWire(payload.httpMaskMux)
-        }
+        val httpMaskMultiplex = HttpMaskMultiplex.fromWire(payload.httpMaskMux)
 
         return NodeConfig(
             name = sanitizedHost,
@@ -115,7 +111,7 @@ object ShortLinkCodec {
             httpMaskHost = node.httpMaskHost.trim().takeIf { it.isNotBlank() },
             httpMaskPath = NodeInputValidator.normalizeHttpMaskPathRoot(node.httpMaskPathRoot).takeIf { it.isNotBlank() },
             httpMaskMux = node.httpMaskMultiplex.wireValue.takeUnless {
-                node.disableHttpMask || it == HttpMaskMultiplex.OFF.wireValue
+                it == HttpMaskMultiplex.OFF.wireValue
             }
         )
         val data = json.encodeToString(Payload.serializer(), payload)

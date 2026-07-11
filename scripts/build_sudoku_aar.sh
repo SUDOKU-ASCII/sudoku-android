@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the upstream v0.4.6 tag.
-SUDOKU_REF="${SUDOKU_REF:-v0.4.6}"
+# Default to the upstream v0.4.8 tag.
+SUDOKU_REF="${SUDOKU_REF:-v0.4.8}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -52,30 +52,13 @@ else
     | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
 fi
 
-# Upstream may set a stricter Go patch version (e.g. go 1.26.2) than what's installed locally.
-# Relax to "go 1.26" (major.minor only) to keep builds working across patch releases.
-echo "Normalizing upstream go.mod go version..."
-SUDOKU_DIR="${SUDOKU_DIR}" python3 - <<'PY'
-from __future__ import annotations
-
-import os
-import pathlib
-import re
-
-path = pathlib.Path(os.environ["SUDOKU_DIR"]) / "go.mod"
-if not path.exists():
-    raise SystemExit(0)
-data = path.read_text(encoding="utf-8")
-
-def repl(m: re.Match[str]) -> str:
-    major = m.group(1)
-    minor = m.group(2)
-    return f"go {major}.{minor}"
-
-new = re.sub(r"(?m)^go\s+(\d+)\.(\d+)\.\d+\s*$", repl, data)
-if new != data:
-    path.write_text(new, encoding="utf-8")
-PY
+# Honor the exact upstream Go requirement. With the default v0.4.8 ref this is
+# Go 1.26.4; Go's toolchain auto-selection downloads it when necessary.
+upstream_go_version="$(awk '$1 == "go" { print $2; exit }' "${SUDOKU_DIR}/go.mod")"
+if [[ -n "${upstream_go_version}" && -z "${GOTOOLCHAIN:-}" ]]; then
+  export GOTOOLCHAIN="go${upstream_go_version}+auto"
+fi
+echo "Using Go toolchain requirement ${upstream_go_version:-unknown} (${GOTOOLCHAIN:-default})"
 
 if [[ -d "${PATCH_DIR}" ]]; then
   echo "Overlaying local sudoku patches from ${PATCH_DIR}..."
