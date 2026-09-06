@@ -9,7 +9,7 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.3.0"
+val computedVersionName: String = tagVersionName ?: "0.3.1"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
@@ -181,7 +181,7 @@ val ensureHevDeps by tasks.registering {
             }
             exec {
                 workingDir = hevRoot
-                commandLine("git", "checkout", "00c7eb9ad7ca381b0f1fee880abc1077fe9b93be")
+                commandLine("git", "checkout", "9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a")
             }
         }
 

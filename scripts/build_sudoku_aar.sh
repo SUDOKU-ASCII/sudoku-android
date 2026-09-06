@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the upstream v0.4.8 tag.
-SUDOKU_REF="${SUDOKU_REF:-v0.4.8}"
+# Default to the upstream v0.5.0 tag.
+SUDOKU_REF="${SUDOKU_REF:-v0.5.0}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -52,7 +52,7 @@ else
     | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
 fi
 
-# Honor the exact upstream Go requirement. With the default v0.4.8 ref this is
+# Honor the exact upstream Go requirement. With the default v0.5.0 ref this is
 # Go 1.26.4; Go's toolchain auto-selection downloads it when necessary.
 upstream_go_version="$(awk '$1 == "go" { print $2; exit }' "${SUDOKU_DIR}/go.mod")"
 if [[ -n "${upstream_go_version}" && -z "${GOTOOLCHAIN:-}" ]]; then

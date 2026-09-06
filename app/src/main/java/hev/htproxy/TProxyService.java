@@ -6,8 +6,8 @@ package hev.htproxy;
  * signatures, matching its default PKGNAME/CLSNAME.
  */
 public class TProxyService {
-    public native void TProxyStartService(String configPath, int tunFd);
-    public native void TProxyStopService();
+    public native boolean TProxyStartService(String configPath, int tunFd);
+    public native boolean TProxyStopService();
+    public native boolean TProxyIsRunning();
     public native long[] TProxyGetStats();
 }
-

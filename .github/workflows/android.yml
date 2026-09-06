@@ -55,7 +55,7 @@ jobs:
             git clone --recursive https://github.com/heiher/hev-socks5-tunnel third_party/hev-socks5-tunnel
           fi
           cd third_party/hev-socks5-tunnel
-          git checkout 00c7eb9ad7ca381b0f1fee880abc1077fe9b93be
+          git checkout 9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a
           git submodule update --init --recursive
 
 
@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.4.8
+          SUDOKU_REF: v0.5.0
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -378,7 +378,8 @@ jobs:
           files: dist/*.apk
           make_latest: true
           body: |
-            - Upgrade the bundled Sudoku core to upstream `v0.4.8` and build it with Go `1.26.4`.
+            - Upgrade the bundled Sudoku core to upstream `v0.5.0` and build it with Go `1.26.4`.
+            - Update hev-socks5-tunnel to stable commit `9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a` (release `2.17.1`).
             - Support `-` and `_` prefixed PAC rule URLs that force matching destinations through the proxy.
             - Persist successfully downloaded URL rules and fall back to the last valid cache when startup networking is unavailable.
             - Move `multiplex` to the top-level core configuration while preserving short-link compatibility and raw TCP mux support.

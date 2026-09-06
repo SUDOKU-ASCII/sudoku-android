@@ -13,12 +13,11 @@ object Socks5TunnelNative {
 
     /**
      * 封装官方 sockstun 的 JNI 接口，通过 hev.htproxy.TProxyService 代理：
-     * TProxyStartService(configPath, tunFd) / TProxyStopService()
+     * TProxyStartService(configPath, tunFd) / TProxyStopService() / TProxyIsRunning()
      */
     fun start(configPath: String, tunFd: Int): Int {
         return try {
-            impl.TProxyStartService(configPath, tunFd)
-            0
+            if (impl.TProxyStartService(configPath, tunFd)) 0 else -1
         } catch (_: Throwable) {
             -1
         }
@@ -26,5 +25,9 @@ object Socks5TunnelNative {
 
     fun stop() {
         runCatching { impl.TProxyStopService() }
+    }
+
+    fun isRunning(): Boolean {
+        return runCatching { impl.TProxyIsRunning() }.getOrDefault(false)
     }
 }
