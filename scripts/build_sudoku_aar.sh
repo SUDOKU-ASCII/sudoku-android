@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the upstream v0.5.0 tag.
-SUDOKU_REF="${SUDOKU_REF:-v0.5.0}"
+# Default to the latest upstream sudoku commit (post-v0.5.0 main).
+SUDOKU_REF="${SUDOKU_REF:-4889b53cb35355123bebd40e6c76a9582de7c23d}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -38,22 +38,43 @@ mkdir -p "${WORK_DIR}"
 
 # Fetch sudoku
 echo "Fetching sudoku (${SUDOKU_REF})..."
-if command -v git >/dev/null 2>&1; then
-  if ! git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"; then
-    echo "git clone failed; falling back to tarball download..."
-    mkdir -p "${SUDOKU_DIR}"
-    curl -fsSL "https://codeload.github.com/SUDOKU-ASCII/sudoku/tar.gz/${SUDOKU_REF}" \
-      | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
-  fi
-else
-  echo "git not found; downloading tarball..."
+download_tarball() {
+  echo "Downloading sudoku tarball (${SUDOKU_REF})..."
+  rm -r "${SUDOKU_DIR}" 2>/dev/null || true
   mkdir -p "${SUDOKU_DIR}"
   curl -fsSL "https://codeload.github.com/SUDOKU-ASCII/sudoku/tar.gz/${SUDOKU_REF}" \
     | tar -xz -C "${SUDOKU_DIR}" --strip-components=1
+}
+
+fetched=0
+if command -v git >/dev/null 2>&1; then
+  if [[ "${SUDOKU_REF}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    # `git clone --branch` rejects raw commit SHAs, so fetch the commit directly.
+    echo "Fetching sudoku commit ${SUDOKU_REF}..."
+    mkdir -p "${SUDOKU_DIR}"
+    git -C "${SUDOKU_DIR}" init -q
+    git -C "${SUDOKU_DIR}" remote add origin "${SUDOKU_REPO}"
+    if git -C "${SUDOKU_DIR}" fetch --depth 1 origin "${SUDOKU_REF}" \
+      && git -C "${SUDOKU_DIR}" checkout -q FETCH_HEAD; then
+      fetched=1
+    else
+      echo "git fetch failed; falling back to tarball download..."
+      rm -r "${SUDOKU_DIR}" 2>/dev/null || true
+    fi
+  elif git clone --depth 1 --branch "${SUDOKU_REF}" "${SUDOKU_REPO}" "${SUDOKU_DIR}"; then
+    fetched=1
+  else
+    echo "git clone failed; falling back to tarball download..."
+    rm -r "${SUDOKU_DIR}" 2>/dev/null || true
+  fi
 fi
 
-# Honor the exact upstream Go requirement. With the default v0.5.0 ref this is
-# Go 1.26.4; Go's toolchain auto-selection downloads it when necessary.
+if [[ "${fetched}" != "1" ]]; then
+  download_tarball
+fi
+
+# Honor the exact upstream Go requirement. The default ref tracks upstream main
+# (Go 1.26.4); Go's toolchain auto-selection downloads it when necessary.
 upstream_go_version="$(awk '$1 == "go" { print $2; exit }' "${SUDOKU_DIR}/go.mod")"
 if [[ -n "${upstream_go_version}" && -z "${GOTOOLCHAIN:-}" ]]; then
   export GOTOOLCHAIN="go${upstream_go_version}+auto"

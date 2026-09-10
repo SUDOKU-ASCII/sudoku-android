@@ -84,7 +84,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.5.0
+          SUDOKU_REF: 4889b53cb35355123bebd40e6c76a9582de7c23d
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -376,12 +376,10 @@ jobs:
         with:
           name: Sudodroid ${{ github.ref_name }}
           files: dist/*.apk
-          make_latest: true
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          make_latest: ${{ !contains(github.ref_name, '-rc') }}
           body: |
-            - Upgrade the bundled Sudoku core to upstream `v0.5.0` and build it with Go `1.26.4`.
-            - Update hev-socks5-tunnel to stable commit `9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a` (release `2.17.1`).
-            - Support `-` and `_` prefixed PAC rule URLs that force matching destinations through the proxy.
-            - Persist successfully downloaded URL rules and fall back to the last valid cache when startup networking is unavailable.
-            - Move `multiplex` to the top-level core configuration while preserving short-link compatibility and raw TCP mux support.
-            - Save Global, Direct, and PAC mode changes immediately, then restart the active VPN or proxy-only core to apply them.
-            - Keep the Save action dedicated to PAC rule edits.
+            Release candidate for the next minor version.
+            - Track the upstream Sudoku core at its latest commit `4889b53cb35355123bebd40e6c76a9582de7c23d` (post-`v0.5.0` main) instead of the `v0.5.0` tag, built with Go `1.26.4`.
+            - Bundled hev-socks5-tunnel `2.17.1` (commit `9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a`).
+            - Everything else is unchanged from `v0.3.1`; this RC exists to validate the refreshed Sudoku core ahead of the next stable release.
