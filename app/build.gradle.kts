@@ -40,7 +40,7 @@ android {
 
     defaultConfig {
         applicationId = "com.futaiii.sudodroid"
-        minSdk = 28
+        minSdk = 29
         targetSdk = 34
         versionCode = computedVersionCode
         versionName = computedVersionName

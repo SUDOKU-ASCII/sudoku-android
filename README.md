@@ -48,6 +48,7 @@ Gradle downloads the [hev-socks5-tunnel 2.18.0 Android AAR](https://github.com/h
 
 ## Build
 
+- Android 10 (API 29) or newer is required by the upstream hev-socks5-tunnel AAR.
 - Install Go 1.26.4 (or enable Go toolchain auto-selection), Android cmdline-tools, and NDK r26.1.
 - `./gradlew assembleRelease`
 
