@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the latest upstream sudoku commit (post-v0.5.0 main).
-SUDOKU_REF="${SUDOKU_REF:-4889b53cb35355123bebd40e6c76a9582de7c23d}"
+# Default to the tagged upstream release.
+SUDOKU_REF="${SUDOKU_REF:-v0.5.1}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -73,8 +73,8 @@ if [[ "${fetched}" != "1" ]]; then
   download_tarball
 fi
 
-# Honor the exact upstream Go requirement. The default ref tracks upstream main
-# (Go 1.26.4); Go's toolchain auto-selection downloads it when necessary.
+# Honor the exact upstream Go requirement. Go's toolchain auto-selection
+# downloads it when necessary.
 upstream_go_version="$(awk '$1 == "go" { print $2; exit }' "${SUDOKU_DIR}/go.mod")"
 if [[ -n "${upstream_go_version}" && -z "${GOTOOLCHAIN:-}" ]]; then
   export GOTOOLCHAIN="go${upstream_go_version}+auto"

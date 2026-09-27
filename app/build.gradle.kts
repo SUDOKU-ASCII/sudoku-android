@@ -1,3 +1,8 @@
+import java.net.URI
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,7 +14,7 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.4.0-rc.1"
+val computedVersionName: String = tagVersionName ?: "0.3.2"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
@@ -22,7 +27,8 @@ fun computeVersionCodeFromName(name: String): Int {
     val major = parsePart(0)
     val minor = parsePart(1)
     val patch = parsePart(2)
-    return major * 10000 + minor * 100 + patch
+    // Keep new releases installable over the retired 0.4.0-rc.1 (versionCode 400).
+    return 10000 + major * 10000 + minor * 100 + patch
 }
 
 val computedVersionCode: Int = computeVersionCodeFromName(computedVersionName)
@@ -131,6 +137,7 @@ dependencies {
     androidTestImplementation(composeBom)
 
     implementation(files("libs/sudoku.aar"))
+    implementation(files("libs/hev-socks5-tunnel.aar"))
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.9.0")
@@ -154,48 +161,43 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// Ensure hev-socks5-tunnel submodules are present even when the repo is from a zip without submodules.
-val ensureHevDeps by tasks.registering {
-    val root = project.rootDir
-    val hevRoot = root.resolve("third_party/hev-socks5-tunnel")
-    val deps = listOf(
-        hevRoot.resolve("Android.mk"),
-        hevRoot.resolve("build.mk"),
-        hevRoot.resolve("third-part/yaml/Android.mk"),
-        hevRoot.resolve("third-part/lwip/Android.mk"),
-        hevRoot.resolve("third-part/hev-task-system/Android.mk")
-    )
-    outputs.files(deps)
+// Use the upstream AAR, which contains the default JNI binding and Android libraries.
+val ensureHevAar by tasks.registering {
+    val version = "2.18.0"
+    val expectedSha256 = "15ec8ed121663b562c99caa5bb602d1009f24e5b09e733438b81988f12feaaab"
+    val aar = projectDir.resolve("libs/hev-socks5-tunnel.aar")
+    inputs.property("hevVersion", version)
+    inputs.property("hevSha256", expectedSha256)
+    outputs.file(aar)
     doLast {
-        if (deps.all { it.exists() }) {
-            logger.lifecycle("hev-socks5-tunnel dependencies already present; skipping fetch")
-            return@doLast
+        fun sha256(file: java.io.File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { stream ->
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = stream.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
         }
 
-        if (!hevRoot.exists()) {
-            logger.lifecycle("Cloning hev-socks5-tunnel into third_party directory")
-            hevRoot.parentFile.mkdirs()
-            exec {
-                workingDir = root
-                commandLine("git", "clone", "--recursive", "https://github.com/heiher/hev-socks5-tunnel", hevRoot.path)
+        if (aar.exists() && sha256(aar) == expectedSha256) return@doLast
+        aar.parentFile.mkdirs()
+        val download = aar.resolveSibling("${aar.name}.download")
+        try {
+            val url = "https://github.com/heiher/hev-socks5-tunnel/releases/download/$version/hev-socks5-tunnel.aar"
+            logger.lifecycle("Downloading hev-socks5-tunnel $version AAR")
+            URI.create(url).toURL().openStream().use { input ->
+                download.outputStream().use { output -> input.copyTo(output) }
             }
-            exec {
-                workingDir = hevRoot
-                commandLine("git", "checkout", "9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a")
+            check(sha256(download) == expectedSha256) {
+                "hev-socks5-tunnel $version AAR SHA-256 mismatch"
             }
-        }
-
-        if (hevRoot.resolve(".git").exists()) {
-            exec {
-                workingDir = hevRoot
-                commandLine("git", "submodule", "update", "--init", "--recursive")
-            }
-        } else {
-            logger.warn("hev-socks5-tunnel exists but is not a git checkout; skipping submodule update")
-        }
-
-        check(deps.all { it.exists() }) {
-            "Failed to fetch hev-socks5-tunnel dependencies under third_party/hev-socks5-tunnel; please ensure git and network are available."
+            Files.move(download.toPath(), aar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            download.delete()
         }
     }
 }
@@ -220,5 +222,5 @@ val ensureSudokuAar by tasks.registering {
 }
 
 tasks.named("preBuild").configure {
-    dependsOn(ensureHevDeps, ensureSudokuAar)
+    dependsOn(ensureHevAar, ensureSudokuAar)
 }

@@ -254,9 +254,6 @@ class SudokuVpnService : VpnService() {
     }
 
     private fun startTunnel(node: NodeConfig) {
-        if (!Socks5TunnelNative.isLoaded()) {
-            throw IllegalStateException("hev-socks5-tunnel JNI not loaded")
-        }
         val pfd = tunInterface ?: throw IllegalStateException("TUN interface missing")
 
         // Use the same FD for both the VPN interface and the native tunnel,

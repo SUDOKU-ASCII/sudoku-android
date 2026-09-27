@@ -17,11 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
-
-      - name: Init nested submodules
-        run: git submodule update --init --recursive
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -47,44 +43,11 @@ jobs:
         with:
           packages: platform-tools platforms;android-34 ndk;26.1.10909125
 
-      - name: Ensure hev-socks5-tunnel present
-        run: |
-          set -e
-          mkdir -p third_party
-          if [ ! -d third_party/hev-socks5-tunnel ]; then
-            git clone --recursive https://github.com/heiher/hev-socks5-tunnel third_party/hev-socks5-tunnel
-          fi
-          cd third_party/hev-socks5-tunnel
-          git checkout 9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a
-          git submodule update --init --recursive
-
-
-      - name: Build hev-socks5-tunnel JNI libs
-        working-directory: ${{ github.workspace }}/app/src/main/jni
-        env:
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-        run: |
-          set -e
-          echo "=== app/src/main/jni/Android.mk ==="
-          cat Android.mk
-          echo "=== app/src/main/jni/hev-socks5-tunnel/Android.mk ==="
-          cat hev-socks5-tunnel/Android.mk
-          echo "=== third_party/hev-socks5-tunnel/Android.mk ==="
-          cat ../../../../third_party/hev-socks5-tunnel/Android.mk || echo "no third_party Android.mk"
-
-          "$ANDROID_NDK_ROOT/ndk-build" NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk
-          ls -R libs || true
-          mkdir -p ../jniLibs/armeabi-v7a ../jniLibs/arm64-v8a
-          cp libs/armeabi-v7a/libhev-socks5-tunnel*.so ../jniLibs/armeabi-v7a/ || true
-          cp libs/arm64-v8a/libhev-socks5-tunnel*.so ../jniLibs/arm64-v8a/ || true
-          ls -R ../jniLibs
-
-
       - name: Build gomobile AAR (Sudoku core)
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: 4889b53cb35355123bebd40e6c76a9582de7c23d
+          SUDOKU_REF: v0.5.1
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -379,7 +342,4 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           make_latest: ${{ !contains(github.ref_name, '-rc') }}
           body: |
-            Release candidate for the next minor version.
-            - Track the upstream Sudoku core at its latest commit `4889b53cb35355123bebd40e6c76a9582de7c23d` (post-`v0.5.0` main) instead of the `v0.5.0` tag, built with Go `1.26.4`.
-            - Bundled hev-socks5-tunnel `2.17.1` (commit `9a06bc6e7989da54e3d32ff701ef7a7ce4995d3a`).
-            - Everything else is unchanged from `v0.3.1`; this RC exists to validate the refreshed Sudoku core ahead of the next stable release.
+            Bundles Sudoku core `v0.5.1` and the upstream hev-socks5-tunnel `2.18.0` Android AAR.

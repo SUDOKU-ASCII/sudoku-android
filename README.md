@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/SUDOKU-ASCII/sudoku-android?style=for-the-badge)](https://github.com/SUDOKU-ASCII/sudoku-android/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
-Current release: `v0.4.0-rc.1` (release candidate) with Sudoku core commit `4889b53cb35355123bebd40e6c76a9582de7c23d` (post-`v0.5.0` main) and hev-socks5-tunnel `2.17.1`.
+Current release: `v0.3.2`, with Sudoku core `v0.5.1` and hev-socks5-tunnel `2.18.0`.
 
 Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
@@ -32,18 +32,17 @@ Sudodroid is a thin Android shell around the upstream [sudoku](https://github.co
         ▼                                      ▼
 ┌──────────────────────┐      socks5      ┌─────────────────────┐
 │ SudokuVpnService     │ ◄─────────────── │ hev-socks5-tunnel   │
-│  (VpnService)        │   tun fd via JNI │  (ndk-build)        │
+│  (VpnService)        │   tun fd via JNI │  (upstream AAR)     │
 └──────────────────────┘                  └─────────────────────┘
 ```
 
-The Go binding lives in `/mobile` and emits `sudodroid/app/libs/sudoku.aar`. `GoCoreClient` calls into that AAR to start/stop the upstream mixed proxy. The Kotlin UI is strictly for data entry, persistence, and calling into the native cores.
+The Go binding lives in `scripts/sudoku_patches/pkg/mobile` and emits `app/libs/sudoku.aar`. `GoCoreClient` calls into that AAR to start/stop the upstream mixed proxy. The Kotlin UI is strictly for data entry, persistence, and calling into the native cores.
 
 ## Native tunnel
 
-We pull [hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) as a submodule and build it via `ndk-build`, with a tiny JNI bridge that feeds the TUN fd and socks5 upstream (local mixed proxy). Make sure the submodule is present (if you unpacked a ZIP, clone it into `sudodroid/third_party/hev-socks5-tunnel`), and have NDK r26.1 available:
+Gradle downloads the [hev-socks5-tunnel 2.18.0 Android AAR](https://github.com/heiher/hev-socks5-tunnel/releases/tag/2.18.0) and verifies its SHA-256. The AAR includes the native libraries and the default `hev.htproxy.TProxyService` JNI binding; the VPN service passes its TUN fd to that binding. No separate tunnel source checkout or `ndk-build` step is needed.
 
 ```bash
-git submodule update --init --recursive   # or git clone https://github.com/heiher/hev-socks5-tunnel sudodroid/third_party/hev-socks5-tunnel
 ./gradlew assembleRelease
 ```
 
@@ -54,8 +53,8 @@ git submodule update --init --recursive   # or git clone https://github.com/heih
 
 During `preBuild`, Gradle will:
 
-1. Ensure `third_party/hev-socks5-tunnel` (and its submodules) are present.
-2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: commit `4889b53cb35355123bebd40e6c76a9582de7c23d`, the latest upstream `main`), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
+1. Download and verify the hev-socks5-tunnel `2.18.0` AAR into `app/libs/`.
+2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: tag `v0.5.1`), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
 
 Artifacts live in `app/build/outputs/apk/<variant>/`.
 
@@ -70,5 +69,5 @@ Artifacts live in `app/build/outputs/apk/<variant>/`.
 `.github/workflows/android.yml` contains the GitHub Actions recipe used locally:
 
 - Installs Temurin JDK 17, Go 1.26.4, Android cmdline-tools + platform packages, and NDK r26.1.
-- Builds the `gomobile` AAR via `scripts/build_sudoku_aar.sh`.
+- Builds the `gomobile` AAR via `scripts/build_sudoku_aar.sh` and downloads the verified hev-socks5-tunnel AAR during Gradle `preBuild`.
 - Runs `./gradlew :app:assembleRelease` and uploads the resulting APK as an artifact.
