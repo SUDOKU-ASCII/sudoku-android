@@ -132,6 +132,33 @@ class ShortLinkCodecTest {
         assertEquals(true, decoded.disableHttpMask)
         assertEquals(HttpMaskMultiplex.ON, decoded.httpMaskMultiplex)
     }
+
+    @Test
+    fun fromLink_usesPayloadName() {
+        val payload = """{"a":"entropy","e":"chacha20-poly1305","h":"203.0.113.7","hd":true,"hx":"on","hy":"qhzwmrvt","k":"test-key","n":"HKG","p":10233,"x":true}"""
+
+        val decoded = ShortLinkCodec.fromLink("sudoku://" + payload.toBase64Url())
+
+        assertEquals("HKG", decoded.name)
+        assertEquals("203.0.113.7", decoded.host)
+        assertEquals(10233, decoded.port)
+        assertEquals(HttpMaskMultiplex.ON, decoded.httpMaskMultiplex)
+    }
+
+    @Test
+    fun fromLink_fallsBackToFragmentThenHost() {
+        val payload = """{"h":"example.com","p":443,"k":"test-key"}""".toBase64Url()
+
+        assertEquals("香港 01", ShortLinkCodec.fromLink("sudoku://$payload#%E9%A6%99%E6%B8%AF%2001").name)
+        assertEquals("example.com", ShortLinkCodec.fromLink("sudoku://$payload").name)
+    }
+
+    @Test
+    fun toLink_roundTripsName() {
+        val node = NodeConfig(name = "HKG", host = "example.com", port = 443, key = "test-key")
+
+        assertEquals("HKG", ShortLinkCodec.fromLink(ShortLinkCodec.toLink(node)).name)
+    }
 }
 
 private fun String.toBase64Url(): String {

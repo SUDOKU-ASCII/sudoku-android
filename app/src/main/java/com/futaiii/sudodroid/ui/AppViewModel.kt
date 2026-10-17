@@ -114,12 +114,9 @@ class AppViewModel(
                     reverseForwardStatus.value = latestStatus
                     lastStatus = latestStatus
                 }
-                val delayMs = if (latestStatus.running) {
-                    REVERSE_FORWARD_STATUS_RUNNING_POLL_MS
-                } else {
-                    REVERSE_FORWARD_STATUS_IDLE_POLL_MS
-                }
-                delay(delayMs)
+                // A stopped forwarder only changes via start/stop, which restart polling.
+                if (!latestStatus.running) break
+                delay(REVERSE_FORWARD_STATUS_RUNNING_POLL_MS)
             }
         }.also { job ->
             job.invokeOnCompletion {
@@ -299,7 +296,6 @@ class AppViewModel(
 
     private companion object {
         private const val REVERSE_FORWARD_STATUS_RUNNING_POLL_MS = 2_000L
-        private const val REVERSE_FORWARD_STATUS_IDLE_POLL_MS = 15_000L
     }
 }
 

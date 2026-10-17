@@ -33,6 +33,15 @@ const latencyProbeTarget = "i.ytimg.com:443"
 const latencyProbeServerName = "i.ytimg.com"
 const latencyProbePath = "/generate_204"
 const ruleCacheDirEnv = "SUDOKU_RULE_CACHE_DIR"
+const logLevelEnv = "SUDOKU_LOG_LEVEL"
+
+func init() {
+	// gomobile pipes stdout into logcat; per-connection info logs cost CPU on
+	// every new flow, so only warnings and errors are emitted by default.
+	if strings.TrimSpace(os.Getenv(logLevelEnv)) == "" {
+		_ = os.Setenv(logLevelEnv, "warn")
+	}
+}
 
 type latencyProbeResult struct {
 	LatencyMs     int64  `json:"latency_ms"`

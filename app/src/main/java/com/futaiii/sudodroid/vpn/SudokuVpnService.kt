@@ -20,6 +20,7 @@ import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.qs.VpnTileService
+import com.futaiii.sudodroid.util.ScreenState
 import com.futaiii.sudodroid.util.TrafficStatsFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
@@ -197,22 +199,26 @@ class SudokuVpnService : VpnService() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            var lastStats: GoCoreClient.TrafficStats? = null
             var lastNotificationText: String? = null
-            while (isActive && tunnelStarted) {
-                val stats = GoCoreClient.getTrafficStats()
-                val notificationText = buildNotificationText(stats)
-                if (notificationText != lastNotificationText) {
-                    mgr.notify(NOTI_ID, buildNotification(stats))
-                    lastNotificationText = notificationText
+            // Nobody can see the notification with the screen off, so stop polling
+            // the core until the screen comes back on.
+            ScreenState.interactive(this@SudokuVpnService).collectLatest { interactive ->
+                var lastStats: GoCoreClient.TrafficStats? = null
+                while (interactive && isActive && tunnelStarted) {
+                    val stats = GoCoreClient.getTrafficStats()
+                    val notificationText = buildNotificationText(stats)
+                    if (notificationText != lastNotificationText) {
+                        mgr.notify(NOTI_ID, buildNotification(stats))
+                        lastNotificationText = notificationText
+                    }
+                    val delayMs = if (stats != null && stats != lastStats) {
+                        NOTIFICATION_ACTIVE_POLL_MS
+                    } else {
+                        NOTIFICATION_IDLE_POLL_MS
+                    }
+                    lastStats = stats
+                    delay(delayMs)
                 }
-                val delayMs = if (stats != null && stats != lastStats) {
-                    NOTIFICATION_ACTIVE_POLL_MS
-                } else {
-                    NOTIFICATION_IDLE_POLL_MS
-                }
-                lastStats = stats
-                delay(delayMs)
             }
         }
     }
@@ -342,7 +348,10 @@ class SudokuVpnService : VpnService() {
 
         // Config modeled after the official sockstun TProxyService:
         // - tunnel.{mtu,ipv4,ipv6} match the VPN interface.
-        // - socks5.* points at the local Sudoku mixed proxy.
+        // - socks5.* points at the local Sudoku mixed proxy. UDP must use the
+        //   standard UDP ASSOCIATE ('udp'): the core rejects hev's UDP-in-TCP
+        //   command, which made every app UDP flow (QUIC, WeChat/QQ calls)
+        //   fail and fall back slowly.
         // - mapdns rewrites DNS answers into a virtual IPv4 range so
         //   lwIP + hev-mapped-dns can recover hostnames later when
         //   opening outbound TCP connections through Sudoku.
@@ -354,7 +363,7 @@ class SudokuVpnService : VpnService() {
             socks5:
               port: $socksPort
               address: '$socksAddr'
-              udp: 'tcp'
+              udp: 'udp'
             mapdns:
               address: 198.18.0.2
               port: 53
@@ -415,7 +424,7 @@ class SudokuVpnService : VpnService() {
         private const val CHANNEL_ID = "sudoku_vpn"
         private const val NOTI_ID = 1
         private const val TAG = "SudokuVpnService"
-        private const val NOTIFICATION_ACTIVE_POLL_MS = 1_000L
+        private const val NOTIFICATION_ACTIVE_POLL_MS = 2_000L
         private const val NOTIFICATION_IDLE_POLL_MS = 5_000L
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow

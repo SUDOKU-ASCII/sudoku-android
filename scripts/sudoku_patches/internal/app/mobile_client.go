@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/SUDOKU-ASCII/sudoku/internal/config"
 	"github.com/SUDOKU-ASCII/sudoku/internal/tunnel"
 	"github.com/SUDOKU-ASCII/sudoku/pkg/dnsutil"
 	"github.com/SUDOKU-ASCII/sudoku/pkg/obfs/sudoku"
+)
+
+const (
+	mobileMuxIdleTimeout       = 60 * time.Second
+	mobileMuxIdleCheckInterval = 20 * time.Second
 )
 
 type MobileInstance struct {
@@ -98,11 +104,23 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 		muxDone = make(chan struct{})
 		go func() {
 			defer close(muxDone)
-			muxDialer.Maintain(muxCtx, func(err error) {
-				if err != nil {
-					log.Printf("Mux warm session unavailable: %v", err)
+			// Warm once instead of Maintain: a permanently warm session exchanges
+			// keepalives every 15s and drains the battery while the phone is idle.
+			// Dial re-creates the session on demand after the idle closer drops it.
+			if err := muxDialer.Warm(muxCtx); err != nil && muxCtx.Err() == nil {
+				log.Printf("Mux warm session unavailable: %v", err)
+			}
+			idle := tunnel.MuxIdleCloser{Dialer: muxDialer, Timeout: mobileMuxIdleTimeout}
+			ticker := time.NewTicker(mobileMuxIdleCheckInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-muxCtx.Done():
+					return
+				case now := <-ticker.C:
+					idle.Check(now)
 				}
-			})
+			}
 		}()
 	}
 
@@ -130,7 +148,6 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 						log.Printf("PANIC in handleMixedConn: %v", r)
 					}
 				}()
-				log.Printf("Accepted connection from %s", conn.RemoteAddr())
 				// handleMixedConn takes a primary table for legacy helpers;
 				// the dialer itself performs per-connection table rotation.
 				handleMixedConn(conn, cfg, primaryTable, routeMgrs, dialer, resolver)

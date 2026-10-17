@@ -17,6 +17,7 @@ import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.core.CoreRuntime
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
+import com.futaiii.sudodroid.util.ScreenState
 import com.futaiii.sudodroid.util.TrafficStatsFormatter
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.coroutines.CancellationException
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
@@ -175,22 +177,26 @@ class ProxyOnlyService : Service() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            var lastStats: GoCoreClient.TrafficStats? = null
             var lastNotificationText: String? = null
-            while (isActive && coreRunning) {
-                val stats = GoCoreClient.getTrafficStats()
-                val notificationText = buildNotificationText(activeNode, stats)
-                if (notificationText != lastNotificationText) {
-                    mgr.notify(NOTI_ID, buildNotification(activeNode, stats))
-                    lastNotificationText = notificationText
+            // Nobody can see the notification with the screen off, so stop polling
+            // the core until the screen comes back on.
+            ScreenState.interactive(this@ProxyOnlyService).collectLatest { interactive ->
+                var lastStats: GoCoreClient.TrafficStats? = null
+                while (interactive && isActive && coreRunning) {
+                    val stats = GoCoreClient.getTrafficStats()
+                    val notificationText = buildNotificationText(activeNode, stats)
+                    if (notificationText != lastNotificationText) {
+                        mgr.notify(NOTI_ID, buildNotification(activeNode, stats))
+                        lastNotificationText = notificationText
+                    }
+                    val delayMs = if (stats != null && stats != lastStats) {
+                        NOTIFICATION_ACTIVE_POLL_MS
+                    } else {
+                        NOTIFICATION_IDLE_POLL_MS
+                    }
+                    lastStats = stats
+                    delay(delayMs)
                 }
-                val delayMs = if (stats != null && stats != lastStats) {
-                    NOTIFICATION_ACTIVE_POLL_MS
-                } else {
-                    NOTIFICATION_IDLE_POLL_MS
-                }
-                lastStats = stats
-                delay(delayMs)
             }
         }
     }
@@ -273,7 +279,7 @@ class ProxyOnlyService : Service() {
         private const val CHANNEL_ID = "sudoku_proxy_only"
         private const val NOTI_ID = 2
         private const val TAG = "ProxyOnlyService"
-        private const val NOTIFICATION_ACTIVE_POLL_MS = 1_000L
+        private const val NOTIFICATION_ACTIVE_POLL_MS = 2_000L
         private const val NOTIFICATION_IDLE_POLL_MS = 5_000L
 
         private val statusFlow = MutableStateFlow(false)

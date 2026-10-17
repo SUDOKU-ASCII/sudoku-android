@@ -11,6 +11,7 @@ import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.util.Base64
 
@@ -19,11 +20,14 @@ object ShortLinkCodec {
 
     fun fromLink(link: String): NodeConfig {
         val trimmedLink = link.trim()
-        val encoded = if (trimmedLink.startsWith("sudoku://", ignoreCase = true)) {
+        val body = if (trimmedLink.startsWith("sudoku://", ignoreCase = true)) {
             trimmedLink.substringAfter("://").trim()
         } else {
             trimmedLink
         }
+        // Base64 never contains '#', so anything after it is a share-style display name.
+        val encoded = body.substringBefore('#').trim()
+        val fragmentName = body.substringAfter('#', "").let(::decodeFragment)
         require(encoded.isNotEmpty()) { "short link is empty" }
         val raw = decodeBase64Flexible(encoded)
         val payload = json.decodeFromString<Payload>(raw.toString(Charset.forName("UTF-8")))
@@ -65,8 +69,12 @@ object ShortLinkCodec {
         val httpMaskPathRoot = NodeInputValidator.normalizeHttpMaskPathRoot(payload.httpMaskPath)
         val httpMaskMultiplex = HttpMaskMultiplex.fromWire(payload.httpMaskMux)
 
+        val name = payload.name?.trim().orEmpty()
+            .ifEmpty { fragmentName }
+            .ifEmpty { sanitizedHost }
+
         return NodeConfig(
-            name = sanitizedHost,
+            name = name,
             host = sanitizedHost,
             port = serverPort,
             key = key,
@@ -95,7 +103,9 @@ object ShortLinkCodec {
         val primaryCustomTable = normalizedCustomTables.firstOrNull()
             ?.takeIf { it.isNotBlank() }
             ?: node.customTable.trim().takeIf { it.isNotBlank() }
+        val name = node.name.trim()
         val payload = Payload(
+            name = name.takeIf { it.isNotEmpty() && it != host },
             host = host,
             port = node.port,
             key = node.key,
@@ -123,6 +133,7 @@ object ShortLinkCodec {
 
     @Serializable
     private data class Payload(
+        @SerialName("n") val name: String? = null,
         @SerialName("h") val host: String = "",
         @SerialName("p") val port: Int = 0,
         @SerialName("k") val key: String? = null,
@@ -152,6 +163,14 @@ private fun encodeAscii(mode: AsciiMode): String {
 
 private fun decodeAscii(raw: String?): AsciiMode {
     return AsciiMode.fromWire(raw)
+}
+
+private fun decodeFragment(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return ""
+    return runCatching { URLDecoder.decode(trimmed.replace("+", "%2B"), "UTF-8") }
+        .getOrDefault(trimmed)
+        .trim()
 }
 
 private fun decodeBase64Flexible(encoded: String): ByteArray {
