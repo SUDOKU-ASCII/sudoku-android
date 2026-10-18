@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
-# Default to the tagged upstream release.
-SUDOKU_REF="${SUDOKU_REF:-v0.5.1}"
+# Default to the pinned upstream commit.
+SUDOKU_REF="${SUDOKU_REF:-a3a4c8a081221f2a352f2c36deaf8137900718b1}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"

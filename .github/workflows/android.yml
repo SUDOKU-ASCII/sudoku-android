@@ -47,7 +47,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: v0.5.1
+          SUDOKU_REF: a3a4c8a081221f2a352f2c36deaf8137900718b1
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -342,4 +342,4 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           make_latest: ${{ !contains(github.ref_name, '-rc') }}
           body: |
-            Bundles Sudoku core `v0.5.1` and the upstream hev-socks5-tunnel `2.18.0` Android AAR.
+            Release candidate for `v0.3.3`, tracking the upstream Sudoku core at commit `a3a4c8a081221f2a352f2c36deaf8137900718b1` (post-`v0.5.1` main), bundled with the upstream hev-socks5-tunnel `2.18.0` Android AAR.

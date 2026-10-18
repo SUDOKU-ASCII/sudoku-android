@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/SUDOKU-ASCII/sudoku-android?style=for-the-badge)](https://github.com/SUDOKU-ASCII/sudoku-android/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
-Current release: `v0.3.2`, with Sudoku core `v0.5.1` and hev-socks5-tunnel `2.18.0`.
+Current release: `v0.3.3-rc01` (release candidate), with Sudoku core commit `a3a4c8a081221f2a352f2c36deaf8137900718b1` (post-`v0.5.1` main) and hev-socks5-tunnel `2.18.0`.
 
 Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
@@ -55,7 +55,7 @@ Gradle downloads the [hev-socks5-tunnel 2.18.0 Android AAR](https://github.com/h
 During `preBuild`, Gradle will:
 
 1. Download and verify the hev-socks5-tunnel `2.18.0` AAR into `app/libs/`.
-2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: tag `v0.5.1`), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
+2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: commit `a3a4c8a081221f2a352f2c36deaf8137900718b1`, post-`v0.5.1` main), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
 
 Artifacts live in `app/build/outputs/apk/<variant>/`.
 

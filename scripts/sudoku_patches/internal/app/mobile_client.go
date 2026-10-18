@@ -10,7 +10,6 @@ import (
 	"github.com/SUDOKU-ASCII/sudoku/internal/config"
 	"github.com/SUDOKU-ASCII/sudoku/internal/tunnel"
 	"github.com/SUDOKU-ASCII/sudoku/pkg/dnsutil"
-	"github.com/SUDOKU-ASCII/sudoku/pkg/obfs/sudoku"
 )
 
 const (
@@ -124,11 +123,6 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 		}()
 	}
 
-	var primaryTable *sudoku.Table
-	if len(tables) > 0 {
-		primaryTable = tables[0]
-	}
-
 	go func() {
 		defer close(done)
 		defer ln.Close()
@@ -145,12 +139,11 @@ func StartMobileClient(cfg *config.Config) (*MobileInstance, error) {
 			go func(conn net.Conn) {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("PANIC in handleMixedConn: %v", r)
+						log.Printf("PANIC in serveMixed: %v", r)
 					}
 				}()
-				// handleMixedConn takes a primary table for legacy helpers;
-				// the dialer itself performs per-connection table rotation.
-				handleMixedConn(conn, cfg, primaryTable, routeMgrs, dialer, resolver)
+				// The dialer performs per-connection table rotation.
+				serveMixed(conn, cfg, routeMgrs, dialer, resolver)
 			}(c)
 		}
 	}()
