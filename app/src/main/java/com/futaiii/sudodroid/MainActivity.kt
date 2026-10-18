@@ -4,12 +4,13 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.core.view.WindowCompat
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.ui.AppRoot
@@ -32,13 +33,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
 
         setContent {
             com.futaiii.sudodroid.ui.theme.SudodroidTheme {
-                Surface(modifier = Modifier) {
+                Surface(modifier = Modifier, color = androidx.compose.ui.graphics.Color.Transparent) {
                     AppRoot(
                         viewModel = viewModel,
                         onToggleVpn = { isRunning ->

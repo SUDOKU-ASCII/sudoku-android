@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.futaiii.sudodroid.core.CoreRuntime
 import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.data.NodeRepository
@@ -30,6 +31,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 data class NodeUi(
     val node: NodeConfig,
@@ -47,7 +49,10 @@ data class AppState(
     val reverseForwardBusy: Boolean = false,
     val reverseForwarderSettings: ReverseForwarderSettings = ReverseForwarderSettings(),
     val error: String? = null
-)
+) {
+    val activeNode: NodeConfig? get() = nodes.firstOrNull { it.isActive }?.node
+    val isRunning: Boolean get() = isVpnRunning || isProxyOnlyRunning
+}
 
 class AppViewModel(
     application: Application,
@@ -231,6 +236,7 @@ class AppViewModel(
         }
     }
 
+    /** Persists the routing mode and, if a core is running, switches it live through the controller. */
     fun updateProxyMode(
         proxyMode: ProxyMode,
         onSaved: (() -> Unit)? = null
@@ -247,6 +253,10 @@ class AppViewModel(
                     )
                 }
             }.onSuccess {
+                if (SudokuVpnService.isRunning || ProxyOnlyService.isRunning) {
+                    val applied = withContext(Dispatchers.IO) { CoreRuntime.applyProxyMode(repo) }
+                    if (!applied) error.value = "Saved, but the running core did not accept the new routing mode"
+                }
                 onSaved?.invoke()
             }.onFailure {
                 error.value = it.message ?: "Failed to save global network settings"

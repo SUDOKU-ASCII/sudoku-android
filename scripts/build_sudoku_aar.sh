@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
 # Default to the pinned upstream commit.
-SUDOKU_REF="${SUDOKU_REF:-a3a4c8a081221f2a352f2c36deaf8137900718b1}"
+SUDOKU_REF="${SUDOKU_REF:-cce3162481e0a30fec928683deb99cc9276128b8}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
@@ -85,66 +85,6 @@ if [[ -d "${PATCH_DIR}" ]]; then
   echo "Overlaying local sudoku patches from ${PATCH_DIR}..."
   cp -R "${PATCH_DIR}/." "${SUDOKU_DIR}/"
 fi
-
-# Patch upstream dialTarget() to wrap direct/proxy sockets so we can attribute traffic.
-echo "Patching dialTarget for traffic stats..."
-python3 - <<PY
-from __future__ import annotations
-
-import pathlib
-import re
-
-path = pathlib.Path("${SUDOKU_DIR}") / "internal/app/client_target.go"
-data = path.read_text(encoding="utf-8")
-
-needle = "func dialTarget("
-start = data.find(needle)
-if start == -1:
-    raise SystemExit("dialTarget not found in internal/app/client_target.go (upstream changed?)")
-
-brace_start = data.find("{", start)
-if brace_start == -1:
-    raise SystemExit("dialTarget brace not found")
-
-level = 0
-end = None
-for i in range(brace_start, len(data)):
-    ch = data[i]
-    if ch == "{":
-        level += 1
-    elif ch == "}":
-        level -= 1
-        if level == 0:
-            end = i + 1
-            break
-
-if end is None:
-    raise SystemExit("dialTarget function end not found")
-
-func_text = data[start:end]
-if "wrapConnForTrafficStats" in func_text:
-    raise SystemExit(0)
-
-def replace_return(text: str, conn_name: str, should_proxy: bool) -> tuple[str, int]:
-    pattern = re.compile(
-        rf"return\s+{re.escape(conn_name)}\s*,\s*((?:[A-Za-z_][A-Za-z0-9_]*\s*,\s*)?)true"
-    )
-
-    def repl(match: re.Match[str]) -> str:
-        middle = match.group(1) or ""
-        return f"return wrapConnForTrafficStats({conn_name}, {str(should_proxy).lower()}), {middle}true"
-
-    return pattern.subn(repl, text, count=1)
-
-func_text, proxy_count = replace_return(func_text, "conn", True)
-func_text, direct_count = replace_return(func_text, "dConn", False)
-
-if proxy_count != 1 or direct_count != 1:
-    raise SystemExit("dialTarget success returns not found (upstream changed?)")
-
-path.write_text(data[:start] + func_text + data[end:], encoding="utf-8")
-print("Patched", path)
-PY
 
 # Build AAR
 if [[ "${SKIP_GOMOBILE_BIND}" == "1" ]]; then

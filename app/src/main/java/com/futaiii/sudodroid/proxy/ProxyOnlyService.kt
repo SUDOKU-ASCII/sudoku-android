@@ -17,22 +17,25 @@ import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.core.CoreRuntime
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
+import com.futaiii.sudodroid.net.TrafficHub
+import com.futaiii.sudodroid.net.TrafficSnapshot
 import com.futaiii.sudodroid.util.ScreenState
 import com.futaiii.sudodroid.util.TrafficStatsFormatter
 import com.futaiii.sudodroid.vpn.SudokuVpnService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ProxyOnlyService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startJob: Job? = null
@@ -80,7 +83,7 @@ class ProxyOnlyService : Service() {
                     activeNode = node
                     activeNodeIdFlow.value = node.id
                     val mgr = getSystemService(NotificationManager::class.java)
-                    mgr.notify(NOTI_ID, buildNotification(node, GoCoreClient.getTrafficStats()))
+                    mgr.notify(NOTI_ID, buildNotification(node, null))
                 }
                 return START_STICKY
             }
@@ -177,27 +180,18 @@ class ProxyOnlyService : Service() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            var lastNotificationText: String? = null
-            // Nobody can see the notification with the screen off, so stop polling
-            // the core until the screen comes back on.
-            ScreenState.interactive(this@ProxyOnlyService).collectLatest { interactive ->
-                var lastStats: GoCoreClient.TrafficStats? = null
-                while (interactive && isActive && coreRunning) {
-                    val stats = GoCoreClient.getTrafficStats()
-                    val notificationText = buildNotificationText(activeNode, stats)
-                    if (notificationText != lastNotificationText) {
-                        mgr.notify(NOTI_ID, buildNotification(activeNode, stats))
-                        lastNotificationText = notificationText
+            var lastText: String? = null
+            // The /traffic stream is only subscribed while the screen is interactive.
+            ScreenState.interactive(this@ProxyOnlyService)
+                .flatMapLatest { interactive -> if (interactive) TrafficHub.snapshots else emptyFlow() }
+                .collect { snapshot ->
+                    if (!coreRunning || !snapshot.live) return@collect
+                    val text = buildNotificationText(activeNode, snapshot)
+                    if (text != lastText) {
+                        mgr.notify(NOTI_ID, buildNotification(activeNode, snapshot))
+                        lastText = text
                     }
-                    val delayMs = if (stats != null && stats != lastStats) {
-                        NOTIFICATION_ACTIVE_POLL_MS
-                    } else {
-                        NOTIFICATION_IDLE_POLL_MS
-                    }
-                    lastStats = stats
-                    delay(delayMs)
                 }
-            }
         }
     }
 
@@ -234,39 +228,41 @@ class ProxyOnlyService : Service() {
         mgr.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(node: NodeConfig?, stats: GoCoreClient.TrafficStats?): Notification {
-        val pendingIntent = PendingIntent.getActivity(
+    private fun buildNotification(node: NodeConfig?, snapshot: TrafficSnapshot?): Notification {
+        val openIntent = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val base = buildNotificationBase(node)
-        val text = buildNotificationText(node, stats)
-
+        val stopIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, ProxyOnlyService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(base)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(pendingIntent)
+            .setContentTitle(node?.name?.ifBlank { node.host } ?: getString(R.string.app_name))
+            .setContentText(buildNotificationText(node, snapshot))
+            .setContentIntent(openIntent)
+            .addAction(0, getString(R.string.action_stop), stopIntent)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setSilent(true)
             .build()
     }
 
-    private fun buildNotificationBase(node: NodeConfig?): String {
-        return node?.let {
-            val name = it.name.ifBlank { it.host }
-            "Proxy only · $name · 127.0.0.1:${it.localPort}"
-        } ?: getString(R.string.notification_proxy_running)
-    }
-
-    private fun buildNotificationText(
-        node: NodeConfig?,
-        stats: GoCoreClient.TrafficStats?
-    ): String {
-        val base = buildNotificationBase(node)
-        return stats?.let { "$base\n${TrafficStatsFormatter.formatSummary(it)}" } ?: base
+    private fun buildNotificationText(node: NodeConfig?, snapshot: TrafficSnapshot?): String {
+        val base = node?.let { "Proxy only · 127.0.0.1:${it.localPort}" }
+            ?: getString(R.string.notification_proxy_running)
+        return if (snapshot != null && snapshot.live) {
+            "$base\n${TrafficStatsFormatter.formatNotification(snapshot)}"
+        } else {
+            base
+        }
     }
 
     companion object {
@@ -279,8 +275,6 @@ class ProxyOnlyService : Service() {
         private const val CHANNEL_ID = "sudoku_proxy_only"
         private const val NOTI_ID = 2
         private const val TAG = "ProxyOnlyService"
-        private const val NOTIFICATION_ACTIVE_POLL_MS = 2_000L
-        private const val NOTIFICATION_IDLE_POLL_MS = 5_000L
 
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow

@@ -526,7 +526,6 @@ func Start(jsonConfig string) error {
 		instance.Stop()
 		instance = nil
 	}
-	app.ResetTrafficStats()
 
 	var cfg config.Config
 	if err := json.Unmarshal([]byte(jsonConfig), &cfg); err != nil {
@@ -539,8 +538,15 @@ func Start(jsonConfig string) error {
 	case "pht":
 		cfg.HTTPMask.Mode = "poll"
 	}
+	wantMode := strings.ToLower(strings.TrimSpace(cfg.ProxyMode))
 	if err := cfg.Finalize(); err != nil {
 		return err
+	}
+	// Finalize turns any rule_urls into PAC; the app always ships its PAC list so the mode can be
+	// switched live, so the requested starting mode wins here.
+	switch wantMode {
+	case "global", "direct", "pac":
+		cfg.ProxyMode = wantMode
 	}
 	atomic.StoreInt32(&coreLocalPort, int32(cfg.LocalPort))
 
@@ -552,19 +558,6 @@ func Start(jsonConfig string) error {
 	return nil
 }
 
-func GetTrafficStatsJson() string {
-	stats := app.SnapshotTrafficStats()
-	b, err := json.Marshal(stats)
-	if err != nil {
-		return "{}"
-	}
-	return string(b)
-}
-
-func ResetTrafficStats() {
-	app.ResetTrafficStats()
-}
-
 func Stop() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -572,5 +565,4 @@ func Stop() {
 		instance.Stop()
 		instance = nil
 	}
-	app.ResetTrafficStats()
 }

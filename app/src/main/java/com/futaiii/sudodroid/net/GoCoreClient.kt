@@ -3,7 +3,6 @@ package com.futaiii.sudodroid.net
 import android.util.Log
 import com.futaiii.sudodroid.data.GlobalProxySettings
 import com.futaiii.sudodroid.data.NodeConfig
-import com.futaiii.sudodroid.data.ProxyMode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -14,14 +13,7 @@ object GoCoreClient {
     private const val TAG = "GoCoreClient"
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
     private val lifecycleLock = Any()
-    private val trafficCacheLock = Any()
     private val reverseStatusCacheLock = Any()
-
-    @Volatile
-    private var lastTrafficStatsRaw: String? = null
-
-    @Volatile
-    private var lastTrafficStats: TrafficStats? = null
 
     @Volatile
     private var lastReverseForwardStatusRaw: String? = null
@@ -38,8 +30,6 @@ object GoCoreClient {
         private val startMethod = mobileClass?.getMethod("start", String::class.java)
         // New signature: stop()
         private val stopMethod = mobileClass?.getMethod("stop")
-        private val trafficMethod = mobileClass?.getMethod("getTrafficStatsJson")
-        private val resetTrafficMethod = mobileClass?.getMethod("resetTrafficStats")
         private val setRuleCacheDirMethod = mobileClass?.let {
             runCatching { it.getMethod("setRuleCacheDir", String::class.java) }.getOrNull()
         }
@@ -70,23 +60,6 @@ object GoCoreClient {
                 stopMethod?.invoke(null)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to stop Go core", e)
-            }
-        }
-
-        fun getTrafficStatsJsonOrNull(): String? {
-            return try {
-                trafficMethod?.invoke(null) as? String
-            } catch (e: Throwable) {
-                Log.w(TAG, "Failed to get Go core traffic stats", e)
-                null
-            }
-        }
-
-        fun resetTrafficStats() {
-            try {
-                resetTrafficMethod?.invoke(null)
-            } catch (e: Throwable) {
-                Log.w(TAG, "Failed to reset Go core traffic stats", e)
             }
         }
 
@@ -147,10 +120,11 @@ object GoCoreClient {
             .onFailure { Log.e(TAG, "Failed to configure Sudoku rule cache", it) }
     }
 
-    fun start(configJson: String) {
+    /** Starts the core; [endpoint] is published to [ControllerApi] once the core is up. */
+    fun start(configJson: String, endpoint: ControllerEndpoint? = null) {
         withLifecycleLock {
-            invalidateTrafficStatsCache()
             invalidateReverseForwardStatusCache()
+            ControllerApi.detach()
             // Ensure previous instance is stopped
             runCatching { MobileBinding.stop() }
             try {
@@ -159,33 +133,16 @@ object GoCoreClient {
                 Log.e(TAG, "Failed to start Go core", t)
                 throw t
             }
+            ControllerApi.attach(endpoint)
         }
     }
 
     fun stop() {
         withLifecycleLock {
+            ControllerApi.detach()
             MobileBinding.stop()
-            invalidateTrafficStatsCache()
             invalidateReverseForwardStatusCache()
         }
-    }
-
-    fun getTrafficStats(): TrafficStats? {
-        val raw = MobileBinding.getTrafficStatsJsonOrNull() ?: return null
-        synchronized(trafficCacheLock) {
-            if (raw == lastTrafficStatsRaw) {
-                return lastTrafficStats
-            }
-            val decoded = runCatching { json.decodeFromString<TrafficStats>(raw) }.getOrNull()
-            lastTrafficStatsRaw = raw
-            lastTrafficStats = decoded
-            return decoded
-        }
-    }
-
-    fun resetTrafficStats() {
-        MobileBinding.resetTrafficStats()
-        invalidateTrafficStatsCache()
     }
 
     fun probeLatency(node: NodeConfig, globalProxySettings: GlobalProxySettings = GlobalProxySettings()): LatencyProbeResult {
@@ -232,18 +189,16 @@ object GoCoreClient {
 
     fun buildConfigJson(
         node: NodeConfig,
-        globalProxySettings: GlobalProxySettings = GlobalProxySettings()
+        globalProxySettings: GlobalProxySettings = GlobalProxySettings(),
+        controller: ControllerEndpoint? = null
     ): String {
         val normalizedHost = normalizeHost(node.host)
         val serverAddress = joinHostPort(normalizedHost, node.port)
         val proxyMode = globalProxySettings.proxyMode.wireValue
-        val ruleUrls = if (globalProxySettings.proxyMode == ProxyMode.PAC) {
-            globalProxySettings.ruleUrls.mapNotNull { url ->
-                val trimmed = url.trim()
-                trimmed.takeIf { it.isNotEmpty() }
-            }
-        } else {
-            emptyList()
+        // Always ship the PAC list: the core keeps it dormant outside PAC, but a live switch to
+        // PAC (PATCH /configs) then has the user's rules to load instead of an empty set.
+        val ruleUrls = globalProxySettings.ruleUrls.mapNotNull { url ->
+            url.trim().takeIf { it.isNotEmpty() }
         }
 
         val normalizedCustomTables = node.customTables
@@ -268,6 +223,9 @@ object GoCoreClient {
             pathRoot = httpMaskPathRoot
         )
         val config = GoCoreConfig(
+            name = node.name.trim(),
+            externalController = controller?.address.orEmpty(),
+            secret = controller?.secret.orEmpty(),
             localPort = node.localPort,
             serverAddress = serverAddress,
             key = node.key.trim(),
@@ -290,6 +248,9 @@ object GoCoreClient {
     private data class GoCoreConfig(
         val mode: String = "client",
         val transport: String = "tcp",
+        val name: String = "",
+        @SerialName("external_controller") val externalController: String = "",
+        val secret: String = "",
         @SerialName("local_port") val localPort: Int,
         @SerialName("server_address") val serverAddress: String,
         val key: String,
@@ -317,14 +278,6 @@ object GoCoreClient {
     )
 
     @Serializable
-    data class TrafficStats(
-        @SerialName("direct_tx") val directTx: Long = 0,
-        @SerialName("direct_rx") val directRx: Long = 0,
-        @SerialName("proxy_tx") val proxyTx: Long = 0,
-        @SerialName("proxy_rx") val proxyRx: Long = 0
-    )
-
-    @Serializable
     data class LatencyProbeResult(
         @SerialName("latency_ms") val latencyMs: Long = -1,
         @SerialName("status_code") val statusCode: Int = 0,
@@ -341,13 +294,6 @@ object GoCoreClient {
         val insecure: Boolean = false,
         @SerialName("last_error") val lastError: String = ""
     )
-
-    private fun invalidateTrafficStatsCache() {
-        synchronized(trafficCacheLock) {
-            lastTrafficStatsRaw = null
-            lastTrafficStats = null
-        }
-    }
 
     private fun invalidateReverseForwardStatusCache() {
         synchronized(reverseStatusCacheLock) {

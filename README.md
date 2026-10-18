@@ -4,17 +4,20 @@
 [![Latest Release](https://img.shields.io/github/v/release/SUDOKU-ASCII/sudoku-android?style=for-the-badge)](https://github.com/SUDOKU-ASCII/sudoku-android/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
-Current release: `v0.3.3-rc01` (release candidate), with Sudoku core commit `a3a4c8a081221f2a352f2c36deaf8137900718b1` (post-`v0.5.1` main) and hev-socks5-tunnel `2.18.0`.
+Current release: `v0.3.3-rc02` (release candidate), with Sudoku core commit `cce3162481e0a30fec928683deb99cc9276128b8` (with the external controller API) and hev-socks5-tunnel `2.18.0`.
 
-Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose, while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
+Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose (Material 3, dark-first), while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
+- **Live traffic, no patches.** The core is started with its loopback external controller enabled; the app streams `GET /traffic` for the speed readout, the session totals, the sparkline and the notification text. The stream is open only while something is looking (app in the foreground or screen on) and closes itself a few seconds after.
+- **Live routing mode.** Global / Direct / PAC is switched with `PATCH /configs` on the running core, with no restart and no dropped connections (it applies to new connections). The PAC list is always handed to the core at start, so switching to PAC at runtime has rules to use.
+- **Activity tab.** Open connections from `GET /connections` (target, direct vs proxy route, bytes each way), with per-connection and close-all actions. It polls every two seconds, only while visible.
+- **Adaptive layout.** Bottom bar on phones, navigation rail on foldables and small tablets, rail plus two-pane layouts with bounded content width on large screens.
 - Full node editor with validation, per-node transport tuning (padding / HTTP mask / custom tables), and a toggle for packed (bandwidth-optimized) downlink.
-- Global network settings card (shared by all nodes): routing mode (Global/Direct/PAC) and PAC rule URLs, including direct rules, `-`/`_`-prefixed proxy rules, and `!`-prefixed reject rules.
-- Routing mode changes are saved immediately and restart the active proxy core; the PAC save button only applies edited rule URLs.
+- PAC rule editor (shared by all nodes): direct rules, `-`/`_`-prefixed proxy rules, and `!`-prefixed reject rules. Rule lists are read at core start, so saving them reconnects a running session.
 - URL rule downloads use the upstream persistent cache with an Android app-private cache directory for offline startup fallback.
 - Proxy-only mode (no VPN required): starts Sudoku core and local mixed proxy directly for app-level proxy use cases.
 - Reverse TCP-over-WebSocket local forwarder UI (no VPN needed), equivalent to `./sudoku -rev-dial ... -rev-listen ...` for local SSH/RDP style hops.
-- Quick Settings tile to start/stop the VPN, plus notification traffic stats split by DIRECT vs PROXY.
+- Quick Settings tile to start/stop the VPN.
 - Import/export `sudoku://` short links, copy them straight into the clipboard, and rename nodes inline.
 - Foreground VPN service that starts the Go core, binds a local mixed proxy, and bridges the device TUN interface through `hev-socks5-tunnel`.
 - Built-in latency probes for each node (runs the thin Kotlin dialer without affecting the active tunnel).
@@ -26,17 +29,21 @@ Sudodroid is a thin Android shell around the upstream [sudoku](https://github.co
 ┌──────────────┐    gomobile bind     ┌────────────────────┐
 │  Android UI  │ ───────────────►     │  mobile/ (Go pkg)  │
 │ (Compose)    │                      │  uses internal/app │
-└──────────────┘                      └────────┬───────────┘
-        │                                      │
-        │ start/stop                           │ listens on 127.0.0.1:mixed_port
-        ▼                                      ▼
+└──────┬───────┘                      └────────┬───────────┘
+       │ TrafficHub / ControllerApi            │ 127.0.0.1:local_port (mixed proxy)
+       │ HTTP + bearer token                   │ 127.0.0.1:random   (external controller)
+       ▼                                       ▼
 ┌──────────────────────┐      socks5      ┌─────────────────────┐
 │ SudokuVpnService     │ ◄─────────────── │ hev-socks5-tunnel   │
 │  (VpnService)        │   tun fd via JNI │  (upstream AAR)     │
 └──────────────────────┘                  └─────────────────────┘
 ```
 
-The Go binding lives in `scripts/sudoku_patches/pkg/mobile` and emits `app/libs/sudoku.aar`. `GoCoreClient` calls into that AAR to start/stop the upstream mixed proxy. The Kotlin UI is strictly for data entry, persistence, and calling into the native cores.
+The Go binding lives in `scripts/sudoku_patches/pkg/mobile` and emits `app/libs/sudoku.aar`. `GoCoreClient` calls into that AAR to start/stop the upstream mixed proxy.
+
+The external controller binds to loopback on a random free port and is protected by a random 128-bit secret generated on every core start. Both are kept in memory only (`ControllerApi`). `TrafficHub` turns the `/traffic` NDJSON stream into one shared `StateFlow` (subscribers: Home, the notifications); it connects on the first subscriber and disconnects three seconds after the last.
+
+Battery notes: no polling timers while the screen is off, no infinite animations, a single shared traffic stream, notification updates only when the text changes, and Compose state collected lifecycle-aware.
 
 ## Native tunnel
 
@@ -49,13 +56,13 @@ Gradle downloads the [hev-socks5-tunnel 2.18.0 Android AAR](https://github.com/h
 ## Build
 
 - Android 10 (API 29) or newer is required by the upstream hev-socks5-tunnel AAR.
-- Install Go 1.26.4 (or enable Go toolchain auto-selection), Android cmdline-tools, and NDK r26.1.
+- Install Go 1.27.2 (or enable Go toolchain auto-selection), Android cmdline-tools, and an NDK (r26.1 recommended). The NDK is needed only by `gomobile bind` when building the Go AAR; the app module has no native code of its own, so Gradle does not pin an NDK version.
 - `./gradlew assembleRelease`
 
 During `preBuild`, Gradle will:
 
 1. Download and verify the hev-socks5-tunnel `2.18.0` AAR into `app/libs/`.
-2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: commit `a3a4c8a081221f2a352f2c36deaf8137900718b1`, post-`v0.5.1` main), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
+2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: commit `cce3162481e0a30fec928683deb99cc9276128b8`, with the external controller API), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
 
 Artifacts live in `app/build/outputs/apk/<variant>/`.
 
@@ -69,6 +76,6 @@ Artifacts live in `app/build/outputs/apk/<variant>/`.
 
 `.github/workflows/android.yml` contains the GitHub Actions recipe used locally:
 
-- Installs Temurin JDK 17, Go 1.26.4, Android cmdline-tools + platform packages, and NDK r26.1.
+- Installs Temurin JDK 17, Go 1.27.2, Android cmdline-tools + platform packages, and NDK r26.1.
 - Builds the `gomobile` AAR via `scripts/build_sudoku_aar.sh` and downloads the verified hev-socks5-tunnel AAR during Gradle `preBuild`.
 - Runs `./gradlew :app:assembleRelease` and uploads the resulting APK as an artifact.

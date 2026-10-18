@@ -7,4 +7,6 @@
     <string name="proxy_channel_name">Sudodroid Proxy Only</string>
     <string name="proxy_channel_description">Keeps your Sudoku local proxy active without VPN</string>
     <string name="qs_tile_proxy_label">Proxy</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="action_stop">Stop</string>
 </resources>

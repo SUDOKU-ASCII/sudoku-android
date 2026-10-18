@@ -14,7 +14,7 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.3.3-rc01"
+val computedVersionName: String = tagVersionName ?: "0.3.3-rc02"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
@@ -36,7 +36,6 @@ val computedVersionCode: Int = computeVersionCodeFromName(computedVersionName)
 android {
     namespace = "com.futaiii.sudodroid"
     compileSdk = 34
-    ndkVersion = "26.1.10909125"
 
     defaultConfig {
         applicationId = "com.futaiii.sudodroid"

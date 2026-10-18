@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GoCoreClientTest {
@@ -83,5 +84,63 @@ class GoCoreClientTest {
         val encodedRules = payload.getValue("rule_urls").jsonArray.map { it.jsonPrimitive.content }
 
         assertEquals(ruleUrls, encodedRules)
+    }
+    @Test
+    fun buildConfigJson_exposesControllerWhenEndpointGiven() {
+        val configJson = GoCoreClient.buildConfigJson(
+            NodeConfig(name = "Tokyo", host = "example.com", port = 443, key = "test-key"),
+            GlobalProxySettings(),
+            ControllerEndpoint(port = 19090, secret = "abc123")
+        )
+
+        val payload = Json.parseToJsonElement(configJson).jsonObject
+
+        assertEquals("127.0.0.1:19090", payload.getValue("external_controller").jsonPrimitive.content)
+        assertEquals("abc123", payload.getValue("secret").jsonPrimitive.content)
+        assertEquals("Tokyo", payload.getValue("name").jsonPrimitive.content)
+    }
+
+    @Test
+    fun buildConfigJson_leavesControllerOffWithoutEndpoint() {
+        val configJson = GoCoreClient.buildConfigJson(
+            NodeConfig(host = "example.com", port = 443, key = "test-key")
+        )
+
+        val payload = Json.parseToJsonElement(configJson).jsonObject
+
+        assertEquals("", payload.getValue("external_controller").jsonPrimitive.content)
+        assertEquals("", payload.getValue("secret").jsonPrimitive.content)
+    }
+
+    @Test
+    fun buildConfigJson_keepsRuleUrlsInEveryModeSoLiveSwitchToPacWorks() {
+        ProxyMode.entries.forEach { mode ->
+            val configJson = GoCoreClient.buildConfigJson(
+                NodeConfig(host = "example.com", port = 443, key = "test-key"),
+                GlobalProxySettings(proxyMode = mode)
+            )
+            val payload = Json.parseToJsonElement(configJson).jsonObject
+            val ruleUrls = payload.getValue("rule_urls").jsonArray.map { it.jsonPrimitive.content }
+
+            assertEquals("rule_urls missing for $mode", DEFAULT_PAC_RULE_URLS, ruleUrls)
+            assertEquals(mode.wireValue, payload.getValue("proxy_mode").jsonPrimitive.content)
+        }
+    }
+
+    @Test
+    fun controllerEndpoint_randomIsLoopbackWithFreshSecret() {
+        val first = ControllerEndpoint.random()
+        val second = ControllerEndpoint.random()
+
+        assertTrue(first.address.startsWith("127.0.0.1:"))
+        assertEquals(32, first.secret.length)
+        assertFalse(first.secret == second.secret)
+    }
+
+    @Test
+    fun controllerApi_mapsPacToRuleOnTheWire() {
+        assertEquals("rule", ControllerApi.wireMode(ProxyMode.PAC))
+        assertEquals("global", ControllerApi.wireMode(ProxyMode.GLOBAL))
+        assertEquals("direct", ControllerApi.wireMode(ProxyMode.DIRECT))
     }
 }

@@ -18,6 +18,8 @@ import com.futaiii.sudodroid.SudodroidApp
 import com.futaiii.sudodroid.core.CoreRuntime
 import com.futaiii.sudodroid.data.NodeConfig
 import com.futaiii.sudodroid.net.GoCoreClient
+import com.futaiii.sudodroid.net.TrafficHub
+import com.futaiii.sudodroid.net.TrafficSnapshot
 import com.futaiii.sudodroid.proxy.ProxyOnlyService
 import com.futaiii.sudodroid.qs.VpnTileService
 import com.futaiii.sudodroid.util.ScreenState
@@ -25,18 +27,19 @@ import com.futaiii.sudodroid.util.TrafficStatsFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SudokuVpnService : VpnService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tunInterface: ParcelFileDescriptor? = null
@@ -199,27 +202,19 @@ class SudokuVpnService : VpnService() {
         notificationJob?.cancel()
         val mgr = getSystemService(NotificationManager::class.java)
         notificationJob = scope.launch {
-            var lastNotificationText: String? = null
-            // Nobody can see the notification with the screen off, so stop polling
-            // the core until the screen comes back on.
-            ScreenState.interactive(this@SudokuVpnService).collectLatest { interactive ->
-                var lastStats: GoCoreClient.TrafficStats? = null
-                while (interactive && isActive && tunnelStarted) {
-                    val stats = GoCoreClient.getTrafficStats()
-                    val notificationText = buildNotificationText(stats)
-                    if (notificationText != lastNotificationText) {
-                        mgr.notify(NOTI_ID, buildNotification(stats))
-                        lastNotificationText = notificationText
+            var lastText: String? = null
+            // Nobody sees the notification with the screen off, so the /traffic stream is only
+            // subscribed while the screen is interactive; the hub closes it a moment after we leave.
+            ScreenState.interactive(this@SudokuVpnService)
+                .flatMapLatest { interactive -> if (interactive) TrafficHub.snapshots else emptyFlow() }
+                .collect { snapshot ->
+                    if (!tunnelStarted || !snapshot.live) return@collect
+                    val text = buildNotificationText(snapshot)
+                    if (text != lastText) {
+                        mgr.notify(NOTI_ID, buildNotification(snapshot))
+                        lastText = text
                     }
-                    val delayMs = if (stats != null && stats != lastStats) {
-                        NOTIFICATION_ACTIVE_POLL_MS
-                    } else {
-                        NOTIFICATION_IDLE_POLL_MS
-                    }
-                    lastStats = stats
-                    delay(delayMs)
                 }
-            }
         }
     }
 
@@ -393,27 +388,42 @@ class SudokuVpnService : VpnService() {
         mgr.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(stats: GoCoreClient.TrafficStats?): Notification {
-        val pendingIntent = PendingIntent.getActivity(
+    private fun buildNotification(snapshot: TrafficSnapshot?): Notification {
+        val openIntent = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val text = buildNotificationText(stats)
+        val stopIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, SudokuVpnService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val node = activeNode
+        val title = node?.name?.ifBlank { node.host } ?: getString(R.string.app_name)
+        val text = buildNotificationText(snapshot)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(getString(R.string.app_name))
+            .setContentTitle(title)
             .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(pendingIntent)
+            .setContentIntent(openIntent)
+            .addAction(0, getString(R.string.action_disconnect), stopIntent)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setSilent(true)
             .build()
     }
 
-    private fun buildNotificationText(stats: GoCoreClient.TrafficStats?): String {
-        return stats?.let(TrafficStatsFormatter::formatSummary)
-            ?: getString(R.string.notification_running)
+    private fun buildNotificationText(snapshot: TrafficSnapshot?): String {
+        return if (snapshot != null && snapshot.live) {
+            TrafficStatsFormatter.formatNotification(snapshot)
+        } else {
+            getString(R.string.notification_running)
+        }
     }
 
     companion object {
@@ -424,8 +434,6 @@ class SudokuVpnService : VpnService() {
         private const val CHANNEL_ID = "sudoku_vpn"
         private const val NOTI_ID = 1
         private const val TAG = "SudokuVpnService"
-        private const val NOTIFICATION_ACTIVE_POLL_MS = 2_000L
-        private const val NOTIFICATION_IDLE_POLL_MS = 5_000L
         private val statusFlow = MutableStateFlow(false)
         val status: StateFlow<Boolean> = statusFlow
         val isRunning: Boolean
