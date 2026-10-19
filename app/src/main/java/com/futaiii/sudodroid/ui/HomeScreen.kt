@@ -194,6 +194,7 @@ private fun HeroPanel(
                     onClick = { onRunModeChange(mode) },
                     enabled = !state.isRunning && !connecting,
                     shape = SegmentedButtonDefaults.itemShape(index, RunMode.entries.size),
+                    colors = segmentedColors(),
                     modifier = Modifier.height(44.dp),
                     label = { Text(mode.label, maxLines = 1) }
                 )
@@ -211,7 +212,7 @@ private fun NodePanel(node: NodeConfig?, latencyMs: Long?, onClick: () -> Unit) 
         onClick = onClick
     ) {
         CenteredRow(modifier = Modifier.fillMaxWidth(), spacing = 14.dp) {
-            Icon(Icons.Rounded.Dns, contentDescription = null, tint = scheme.primary)
+            Icon(Icons.Rounded.Dns, contentDescription = null, tint = scheme.onSurface)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = node?.let { it.name.ifBlank { it.host } } ?: "Choose a node",
@@ -249,7 +250,7 @@ private fun RoutingPanel(mode: ProxyMode, running: Boolean, onSelect: (ProxyMode
             Text(
                 text = "Switches instantly; open connections finish on their current route.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -294,7 +295,7 @@ private fun TrafficPanel(traffic: TrafficSnapshot, running: Boolean) {
             Text(
                 "Connect to see live speed and usage.",
                 style = MaterialTheme.typography.bodySmall,
-                color = scheme.outline
+                color = scheme.onSurfaceVariant
             )
         }
     }

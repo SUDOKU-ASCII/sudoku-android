@@ -74,7 +74,7 @@ fun Panel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val border = BorderStroke(1.dp, if (highlighted) scheme.primary.copy(alpha = 0.55f) else scheme.outlineVariant)
+    val border = BorderStroke(1.dp, if (highlighted) scheme.primary.copy(alpha = 0.55f) else scheme.outline.copy(alpha = 0.45f))
     val inner: @Composable () -> Unit = {
         Column(
             modifier = Modifier.padding(contentPadding),
@@ -177,7 +177,7 @@ fun PowerButton(
             enabled = enabled && !connecting,
             modifier = Modifier.size(diameter),
             shape = CircleShape,
-            color = scheme.surfaceContainerHigh,
+            color = scheme.surfaceContainerHighest,
             border = BorderStroke(2.dp, accent)
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -200,6 +200,16 @@ fun PowerButton(
 }
 
 @Composable
+fun segmentedColors() = SegmentedButtonDefaults.colors(
+    activeContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    activeContentColor = MaterialTheme.colorScheme.onSurface,
+    activeBorderColor = MaterialTheme.colorScheme.outline,
+    inactiveContainerColor = Color.Transparent,
+    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+)
+
+@Composable
 fun ProxyModeSelector(
     selected: ProxyMode,
     onSelect: (ProxyMode) -> Unit,
@@ -211,6 +221,7 @@ fun ProxyModeSelector(
                 selected = selected == mode,
                 onClick = { onSelect(mode) },
                 shape = SegmentedButtonDefaults.itemShape(index, ProxyMode.entries.size),
+                colors = segmentedColors(),
                 modifier = Modifier.height(44.dp),
                 label = { Text(mode.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             )

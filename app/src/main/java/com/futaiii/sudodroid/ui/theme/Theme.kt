@@ -15,51 +15,53 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Charcoal neutrals with a champagne accent; "connected" uses a muted sage so it never shouts.
+// Warm charcoal: 171312 canvas, 2D2929 cards, 383434 selection, D3C3C2 text/strokes, D6B0AE accent.
 object Palette {
-    val Ink = Color(0xFF0B0B0D)
-    val Champagne = Color(0xFFD9BF8C)
-    val ChampagneDeep = Color(0xFF8F7742)
+    val Canvas = Color(0xFF171312)
+    val Card = Color(0xFF2D2929)
+    val Selected = Color(0xFF383434)
+    val Ink = Color(0xFFD3C3C2)
+    val Rose = Color(0xFFD6B0AE)
     val Sage = Color(0xFF8FB8A3)
 }
 
 val DarkColors: ColorScheme = darkColorScheme(
-    primary = Palette.Champagne,
-    onPrimary = Color(0xFF2A1F08),
-    primaryContainer = Color(0xFF3A2F18),
-    onPrimaryContainer = Color(0xFFF2DFB8),
-    inversePrimary = Palette.ChampagneDeep,
-    secondary = Color(0xFFB8AFA0),
-    onSecondary = Color(0xFF211D14),
-    secondaryContainer = Color(0xFF2E2A22),
-    onSecondaryContainer = Color(0xFFE4DBC9),
+    primary = Palette.Rose,
+    onPrimary = Color(0xFF2D1B1A),
+    primaryContainer = Palette.Selected,
+    onPrimaryContainer = Palette.Ink,
+    inversePrimary = Color(0xFF8A6462),
+    secondary = Palette.Ink,
+    onSecondary = Palette.Canvas,
+    secondaryContainer = Palette.Selected,
+    onSecondaryContainer = Palette.Ink,
     tertiary = Palette.Sage,
     onTertiary = Color(0xFF0B2016),
     tertiaryContainer = Color(0xFF1D3A2C),
     onTertiaryContainer = Color(0xFFB3E0C8),
-    background = Palette.Ink,
-    onBackground = Color(0xFFEAE6DE),
-    surface = Color(0xFF111113),
-    onSurface = Color(0xFFEAE6DE),
-    surfaceVariant = Color(0xFF26252A),
-    onSurfaceVariant = Color(0xFF9F9A90),
-    surfaceTint = Palette.Champagne,
-    inverseSurface = Color(0xFFEAE6DE),
-    inverseOnSurface = Color(0xFF1A1A1D),
-    outline = Color(0xFF55524A),
-    outlineVariant = Color(0xFF2B2A27),
+    background = Palette.Canvas,
+    onBackground = Palette.Ink,
+    surface = Palette.Canvas,
+    onSurface = Palette.Ink,
+    surfaceVariant = Palette.Card,
+    onSurfaceVariant = Color(0xFFA99B9A),
+    surfaceTint = Color.Transparent,
+    inverseSurface = Palette.Ink,
+    inverseOnSurface = Palette.Canvas,
+    outline = Palette.Ink,
+    outlineVariant = Color(0xFF4A4343),
     error = Color(0xFFE8A09A),
     onError = Color(0xFF3B0A07),
     errorContainer = Color(0xFF5A1F1B),
     onErrorContainer = Color(0xFFFFDAD6),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFF2C2B30),
-    surfaceDim = Color(0xFF0B0B0D),
-    surfaceContainerLowest = Color(0xFF09090B),
-    surfaceContainerLow = Color(0xFF141416),
-    surfaceContainer = Color(0xFF18181B),
-    surfaceContainerHigh = Color(0xFF1F1F23),
-    surfaceContainerHighest = Color(0xFF27272C)
+    surfaceBright = Palette.Selected,
+    surfaceDim = Palette.Canvas,
+    surfaceContainerLowest = Palette.Canvas,
+    surfaceContainerLow = Palette.Canvas,
+    surfaceContainer = Palette.Card,
+    surfaceContainerHigh = Palette.Card,
+    surfaceContainerHighest = Palette.Selected
 )
 
 val AppShapes = Shapes(
@@ -70,38 +72,40 @@ val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(40.dp)
 )
 
-private val Display = FontFamily.Serif
-private val Body = FontFamily.Default
+private val Sans = FontFamily.SansSerif
 
 val AppTypography: Typography = Typography().let { base ->
     base.copy(
-        displayLarge = base.displayLarge.copy(fontFamily = Display, fontWeight = FontWeight.Light),
-        displayMedium = base.displayMedium.copy(fontFamily = Display, fontWeight = FontWeight.Light),
-        displaySmall = base.displaySmall.copy(fontFamily = Display, fontWeight = FontWeight.Light),
-        headlineLarge = base.headlineLarge.copy(fontFamily = Display, fontWeight = FontWeight.Normal),
-        headlineMedium = base.headlineMedium.copy(fontFamily = Display, fontWeight = FontWeight.Normal),
-        headlineSmall = base.headlineSmall.copy(fontFamily = Display, fontWeight = FontWeight.Normal),
-        titleLarge = base.titleLarge.copy(fontFamily = Body, fontWeight = FontWeight.Medium),
-        titleMedium = base.titleMedium.copy(fontFamily = Body, fontWeight = FontWeight.Medium, letterSpacing = 0.15.sp),
-        labelLarge = base.labelLarge.copy(fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp),
-        labelMedium = base.labelMedium.copy(letterSpacing = 0.8.sp),
-        labelSmall = base.labelSmall.copy(letterSpacing = 1.0.sp)
+        displayLarge = base.displayLarge.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold),
+        displayMedium = base.displayMedium.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold),
+        displaySmall = base.displaySmall.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold),
+        headlineLarge = base.headlineLarge.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp),
+        headlineMedium = base.headlineMedium.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp),
+        headlineSmall = base.headlineSmall.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+        titleLarge = base.titleLarge.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold),
+        titleMedium = base.titleMedium.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
+        titleSmall = base.titleSmall.copy(fontFamily = Sans, fontWeight = FontWeight.Medium),
+        bodyLarge = base.bodyLarge.copy(fontFamily = Sans),
+        bodyMedium = base.bodyMedium.copy(fontFamily = Sans),
+        bodySmall = base.bodySmall.copy(fontFamily = Sans),
+        labelLarge = base.labelLarge.copy(fontFamily = Sans, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp),
+        labelMedium = base.labelMedium.copy(fontFamily = Sans, fontWeight = FontWeight.SemiBold, letterSpacing = 1.0.sp),
+        labelSmall = base.labelSmall.copy(fontFamily = Sans, fontWeight = FontWeight.Medium, letterSpacing = 0.8.sp)
     )
 }
 
-/** Large, tabular-looking figures for the live speed readout. */
+/** Large figures for the live speed readout; tabular digits keep the width steady as values change. */
 val SpeedFigure = TextStyle(
-    fontFamily = Display,
-    fontWeight = FontWeight.Light,
-    fontSize = 40.sp,
-    lineHeight = 44.sp,
-    letterSpacing = (-0.5).sp
+    fontFamily = Sans,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 36.sp,
+    lineHeight = 40.sp,
+    letterSpacing = (-0.5).sp,
+    fontFeatureSettings = "tnum"
 )
 
-/** Faint warm glow at the top fading into ink; the only decoration behind the screens. */
-val AppBackgroundBrush: Brush = Brush.verticalGradient(
-    colors = listOf(Color(0xFF1B1812), Color(0xFF111012), Palette.Ink)
-)
+/** Flat canvas colour; the screens carry no decorative gradient. */
+val AppBackgroundBrush: Brush = Brush.verticalGradient(colors = listOf(Palette.Canvas, Palette.Canvas))
 
 @Composable
 fun SudodroidTheme(content: @Composable () -> Unit) {

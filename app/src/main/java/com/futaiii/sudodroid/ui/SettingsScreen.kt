@@ -214,7 +214,7 @@ private fun RulesPanel(
             Text(
                 "Rule lists are read when the core starts, so saving briefly reconnects the running session.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -246,7 +246,7 @@ private fun ForwarderPanel(
             Text(
                 if (status.running) "Running" else "Stopped",
                 style = MaterialTheme.typography.labelLarge,
-                color = if (status.running) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline
+                color = if (status.running) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         OutlinedTextField(

@@ -126,7 +126,7 @@ private fun NodeCard(
             Icon(
                 imageVector = if (nodeUi.isActive) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
                 contentDescription = if (nodeUi.isActive) "Selected" else "Not selected",
-                tint = if (nodeUi.isActive) scheme.primary else scheme.outline
+                tint = scheme.onSurface
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -166,17 +166,17 @@ private fun NodeCard(
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onPing) {
-                Icon(Icons.Rounded.Speed, contentDescription = "Test latency", tint = scheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Speed, contentDescription = "Test latency", tint = scheme.onSurface)
             }
             IconButton(onClick = onCopyLink) {
-                Icon(Icons.Rounded.Link, contentDescription = "Copy short link", tint = scheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Link, contentDescription = "Copy short link", tint = scheme.onSurface)
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onEdit) {
-                Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = scheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = scheme.onSurface)
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete", tint = scheme.onSurfaceVariant)
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete", tint = scheme.onSurface)
             }
         }
     }
@@ -210,7 +210,7 @@ private fun EmptyNodes(onAdd: () -> Unit) {
         Icon(
             imageVector = Icons.Rounded.Shield,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.size(56.dp)
         )
         Text("No nodes yet", style = MaterialTheme.typography.headlineSmall)
