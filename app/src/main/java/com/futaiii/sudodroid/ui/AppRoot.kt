@@ -35,6 +35,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -273,27 +277,37 @@ fun AppRoot(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 if (compact) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        tonalElevation = 0.dp
+                    Surface(
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp, top = 4.dp),
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer
                     ) {
-                        Destination.entries.forEach { item ->
-                            val selected = destination == item
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { destination = item },
-                                icon = {
-                                    Icon(if (selected) item.selectedIcon else item.icon, contentDescription = item.label)
-                                },
-                                label = { Text(item.label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        NavigationBar(
+                            containerColor = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            modifier = Modifier.height(72.dp)
+                        ) {
+                            Destination.entries.forEach { item ->
+                                val selected = destination == item
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { destination = item },
+                                    icon = {
+                                        Icon(if (selected) item.selectedIcon else item.icon, contentDescription = item.label)
+                                    },
+                                    label = { Text(item.label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 }

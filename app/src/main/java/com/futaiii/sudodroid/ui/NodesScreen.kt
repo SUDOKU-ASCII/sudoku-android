@@ -119,7 +119,7 @@ private fun NodeCard(
     Panel(
         modifier = Modifier.fillMaxWidth(),
         highlighted = nodeUi.isActive,
-        contentPadding = PaddingValues(start = 18.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 10.dp, top = 18.dp, bottom = 8.dp),
         onClick = onSelect
     ) {
         CenteredRow(modifier = Modifier.fillMaxWidth(), spacing = 14.dp) {
@@ -156,8 +156,8 @@ private fun NodeCard(
         }
         FlowRow(
             modifier = Modifier.padding(end = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Tag(node.aead.wireName)
             Tag(node.asciiMode.description)
@@ -165,18 +165,18 @@ private fun NodeCard(
             Tag("Pad ${node.paddingMin}-${node.paddingMax}%")
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPing) {
-                Icon(Icons.Rounded.Speed, contentDescription = "Test latency", tint = scheme.onSurface)
+            IconButton(onClick = onPing, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Rounded.Speed, contentDescription = "Test latency", tint = scheme.onSurface, modifier = Modifier.size(20.dp))
             }
-            IconButton(onClick = onCopyLink) {
-                Icon(Icons.Rounded.Link, contentDescription = "Copy short link", tint = scheme.onSurface)
+            IconButton(onClick = onCopyLink, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Rounded.Link, contentDescription = "Copy short link", tint = scheme.onSurface, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = scheme.onSurface)
+            IconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = scheme.onSurface, modifier = Modifier.size(20.dp))
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete", tint = scheme.onSurface)
+            IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete", tint = scheme.onSurface, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -186,7 +186,7 @@ private fun NodeCard(
 private fun Tag(text: String) {
     Surface(
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Text(
             text = text,

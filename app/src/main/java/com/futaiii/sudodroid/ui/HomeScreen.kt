@@ -29,6 +29,11 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -80,11 +85,17 @@ fun HomeScreen(
         HeroPanel(
             state = state,
             node = node,
-            runMode = runMode,
             connecting = connecting,
-            onRunModeChange = onRunModeChange,
             onTogglePower = onTogglePower,
             onOpenNodes = onOpenNodes
+        )
+    }
+    val runPanel: @Composable () -> Unit = {
+        RunModePanel(
+            runMode = runMode,
+            locked = state.isRunning || connecting,
+            node = node,
+            onChange = onRunModeChange
         )
     }
     val nodePanel: @Composable () -> Unit = { NodePanel(node = node, latencyMs = state.nodes.firstOrNull { it.isActive }?.latencyMs, onClick = onOpenNodes) }
@@ -119,17 +130,19 @@ fun HomeScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         hero()
                         nodePanel()
+                        runPanel()
                     }
                     Column(Modifier.weight(1.15f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        routing()
                         trafficPanel()
+                        routing()
                     }
                 }
             } else {
                 hero()
-                nodePanel()
-                routing()
                 trafficPanel()
+                routing()
+                runPanel()
+                nodePanel()
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -140,65 +153,102 @@ fun HomeScreen(
 private fun HeroPanel(
     state: AppState,
     node: NodeConfig?,
-    runMode: RunMode,
     connecting: Boolean,
-    onRunModeChange: (RunMode) -> Unit,
     onTogglePower: () -> Unit,
     onOpenNodes: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val statusText = when {
+        state.isRunning -> "Connected"
+        connecting -> "Connecting"
+        node == null -> "No node yet"
+        else -> "Not connected"
+    }
     Panel(
         modifier = Modifier.fillMaxWidth(),
-        highlighted = state.isRunning
+        highlighted = state.isRunning,
+        contentPadding = PaddingValues(start = 24.dp, end = 20.dp, top = 22.dp, bottom = 22.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        CenteredRow(modifier = Modifier.fillMaxWidth(), spacing = 16.dp) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(shape = CircleShape, color = scheme.surfaceContainerLow) {
+                    CenteredRow(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        spacing = 8.dp
+                    ) {
+                        Dot(if (state.isRunning) scheme.tertiary else scheme.onSurfaceVariant, 7.dp)
+                        Text(
+                            statusText,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (state.isRunning) scheme.tertiary else scheme.onSurface
+                        )
+                    }
+                }
+                Text(
+                    text = node?.let { it.name.ifBlank { it.host } } ?: "Add a node",
+                    style = MaterialTheme.typography.headlineMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = when {
+                        node == null -> "Import a sudoku:// link or add one by hand"
+                        state.isProxyOnlyRunning -> "Local proxy on 127.0.0.1:${node.localPort}"
+                        else -> formatHostPort(node.host, node.port)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (node == null) {
+                    FilledTonalButton(onClick = onOpenNodes) { Text("Add a node") }
+                }
+            }
             PowerButton(
                 running = state.isRunning,
                 connecting = connecting && !state.isRunning,
                 enabled = node != null || state.isRunning,
-                onClick = onTogglePower
+                onClick = onTogglePower,
+                diameter = 96.dp
             )
-            Text(
-                text = when {
-                    state.isRunning -> "Connected"
-                    connecting -> "Connecting"
-                    node == null -> "No node yet"
-                    else -> "Not connected"
-                },
-                style = MaterialTheme.typography.headlineSmall,
-                color = if (state.isRunning) scheme.tertiary else scheme.onSurface
-            )
-            Text(
-                text = when {
-                    state.isVpnRunning -> "All device traffic is tunnelled"
-                    state.isProxyOnlyRunning && node != null -> "Proxy on 127.0.0.1:${node.localPort}"
-                    node == null -> "Add or import a node to begin"
-                    else -> "Tap to ${if (runMode == RunMode.VPN) "start the VPN" else "start the local proxy"}"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-            if (node == null) {
-                FilledTonalButton(onClick = onOpenNodes) { Text("Add a node") }
-            }
         }
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            RunMode.entries.forEachIndexed { index, mode ->
-                SegmentedButton(
-                    selected = runMode == mode,
-                    onClick = { onRunModeChange(mode) },
-                    enabled = !state.isRunning && !connecting,
-                    shape = SegmentedButtonDefaults.itemShape(index, RunMode.entries.size),
-                    colors = segmentedColors(),
-                    modifier = Modifier.height(44.dp),
-                    label = { Text(mode.label, maxLines = 1) }
+    }
+}
+
+@Composable
+private fun RunModePanel(
+    runMode: RunMode,
+    locked: Boolean,
+    node: NodeConfig?,
+    onChange: (RunMode) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val vpn = runMode == RunMode.VPN
+    Panel(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)) {
+        CenteredRow(modifier = Modifier.fillMaxWidth(), spacing = 16.dp) {
+            Surface(shape = MaterialTheme.shapes.medium, color = scheme.surfaceContainerHighest) {
+                Icon(
+                    Icons.Rounded.Shield,
+                    contentDescription = null,
+                    tint = if (vpn) scheme.primary else scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(12.dp)
                 )
             }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("VPN mode", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = if (vpn) "All device traffic is tunnelled"
+                    else "Local proxy only${node?.let { " · 127.0.0.1:${it.localPort}" }.orEmpty()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = vpn,
+                onCheckedChange = { onChange(if (it) RunMode.VPN else RunMode.PROXY_ONLY) },
+                enabled = !locked
+            )
         }
     }
 }
@@ -212,7 +262,14 @@ private fun NodePanel(node: NodeConfig?, latencyMs: Long?, onClick: () -> Unit) 
         onClick = onClick
     ) {
         CenteredRow(modifier = Modifier.fillMaxWidth(), spacing = 14.dp) {
-            Icon(Icons.Rounded.Dns, contentDescription = null, tint = scheme.onSurface)
+            Surface(shape = MaterialTheme.shapes.medium, color = scheme.surfaceContainerHighest) {
+                Icon(
+                    Icons.Rounded.Dns,
+                    contentDescription = null,
+                    tint = scheme.onSurface,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = node?.let { it.name.ifBlank { it.host } } ?: "Choose a node",
@@ -259,37 +316,37 @@ private fun RoutingPanel(mode: ProxyMode, running: Boolean, onSelect: (ProxyMode
 @Composable
 private fun TrafficPanel(traffic: TrafficSnapshot, running: Boolean) {
     val scheme = MaterialTheme.colorScheme
-    val dim = if (running && traffic.live) 1f else 0.45f
     Panel(modifier = Modifier.fillMaxWidth()) {
         Eyebrow("Live traffic")
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SpeedReadout(
+            SpeedTile(
                 modifier = Modifier.weight(1f),
                 label = "Download",
-                value = TrafficStatsFormatter.formatRate(traffic.down),
-                color = scheme.primary.copy(alpha = dim),
-                down = true
+                rate = TrafficStatsFormatter.formatRate(traffic.down),
+                total = TrafficStatsFormatter.formatBytes(traffic.downTotal),
+                down = true,
+                dim = !(running && traffic.live)
             )
-            SpeedReadout(
+            SpeedTile(
                 modifier = Modifier.weight(1f),
                 label = "Upload",
-                value = TrafficStatsFormatter.formatRate(traffic.up),
-                color = scheme.secondary.copy(alpha = dim),
-                down = false
+                rate = TrafficStatsFormatter.formatRate(traffic.up),
+                total = TrafficStatsFormatter.formatBytes(traffic.upTotal),
+                down = false,
+                dim = !(running && traffic.live)
             )
         }
-        Sparkline(
-            history = traffic.history,
-            downColor = scheme.primary,
-            upColor = scheme.secondary,
-            gridColor = scheme.outlineVariant,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(112.dp)
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Metric("Downloaded", TrafficStatsFormatter.formatBytes(traffic.downTotal), modifier = Modifier.weight(1f))
-            Metric("Uploaded", TrafficStatsFormatter.formatBytes(traffic.upTotal), modifier = Modifier.weight(1f))
+        Surface(shape = MaterialTheme.shapes.medium, color = scheme.surfaceContainerLow) {
+            Sparkline(
+                history = traffic.history,
+                downColor = scheme.primary,
+                upColor = scheme.onSurfaceVariant,
+                gridColor = scheme.outlineVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(104.dp)
+                    .padding(vertical = 8.dp)
+            )
         }
         if (!running) {
             Text(
@@ -302,32 +359,34 @@ private fun TrafficPanel(traffic: TrafficSnapshot, running: Boolean) {
 }
 
 @Composable
-private fun SpeedReadout(
+private fun SpeedTile(
     label: String,
-    value: String,
-    color: Color,
+    rate: String,
+    total: String,
     down: Boolean,
+    dim: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        CenteredRow(spacing = 4.dp) {
-            Icon(
-                imageVector = if (down) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward,
-                contentDescription = null,
-                tint = color
-            )
+    val scheme = MaterialTheme.colorScheme
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.medium, color = scheme.surfaceContainerLow) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            CenteredRow(spacing = 6.dp) {
+                Icon(
+                    imageVector = if (down) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward,
+                    contentDescription = null,
+                    tint = if (down) scheme.primary else scheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(label, style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+            }
             Text(
-                label.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = rate,
+                style = SpeedFigure.copy(fontSize = 26.sp, lineHeight = 30.sp),
+                color = if (dim) scheme.onSurfaceVariant else scheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Text("Total $total", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
         }
-        Text(
-            text = value,
-            style = SpeedFigure.copy(fontSize = 28.sp, lineHeight = 32.sp),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }

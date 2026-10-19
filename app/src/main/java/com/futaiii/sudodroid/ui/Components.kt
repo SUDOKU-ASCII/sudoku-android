@@ -22,7 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Rule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,6 +47,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -74,7 +78,7 @@ fun Panel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val border = BorderStroke(1.dp, if (highlighted) scheme.primary.copy(alpha = 0.55f) else scheme.outline.copy(alpha = 0.45f))
+    val border = if (highlighted) BorderStroke(1.dp, scheme.primary.copy(alpha = 0.4f)) else null
     val inner: @Composable () -> Unit = {
         Column(
             modifier = Modifier.padding(contentPadding),
@@ -143,11 +147,7 @@ fun PowerButton(
 ) {
     val scheme = MaterialTheme.colorScheme
     val accent by animateColorAsState(
-        targetValue = when {
-            running -> scheme.tertiary
-            connecting -> scheme.primary
-            else -> scheme.outline
-        },
+        targetValue = if (running) scheme.tertiary else scheme.primary,
         animationSpec = tween(450),
         label = "powerAccent"
     )
@@ -177,14 +177,14 @@ fun PowerButton(
             enabled = enabled && !connecting,
             modifier = Modifier.size(diameter),
             shape = CircleShape,
-            color = scheme.surfaceContainerHighest,
-            border = BorderStroke(2.dp, accent)
+            color = accent,
+            shadowElevation = 0.dp
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Rounded.PowerSettingsNew,
                     contentDescription = if (running) "Disconnect" else "Connect",
-                    tint = if (running) scheme.tertiary else scheme.onSurface,
+                    tint = scheme.onPrimary,
                     modifier = Modifier.size(diameter * 0.36f)
                 )
             }
@@ -192,22 +192,53 @@ fun PowerButton(
         if (connecting) {
             CircularProgressIndicator(
                 modifier = Modifier.size(diameter + 12.dp),
-                color = scheme.primary,
+                color = scheme.onSurface,
                 strokeWidth = 2.dp
             )
         }
     }
 }
 
+/** Inset selection tile: icon over label, filled when selected. */
 @Composable
-fun segmentedColors() = SegmentedButtonDefaults.colors(
-    activeContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-    activeContentColor = MaterialTheme.colorScheme.onSurface,
-    activeBorderColor = MaterialTheme.colorScheme.outline,
-    inactiveContainerColor = Color.Transparent,
-    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-)
+fun ChoiceTile(
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        if (selected) scheme.surfaceContainerHighest else scheme.surfaceContainerLow,
+        tween(200),
+        label = "tile"
+    )
+    val content = if (selected) scheme.primary else scheme.onSurfaceVariant
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = container
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = content, maxLines = 1)
+        }
+    }
+}
+
+private fun ProxyMode.icon(): ImageVector = when (this) {
+    ProxyMode.PAC -> Icons.Rounded.Rule
+    ProxyMode.GLOBAL -> Icons.Rounded.Public
+    ProxyMode.DIRECT -> Icons.Rounded.AltRoute
+}
 
 @Composable
 fun ProxyModeSelector(
@@ -215,15 +246,14 @@ fun ProxyModeSelector(
     onSelect: (ProxyMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
-        ProxyMode.entries.forEachIndexed { index, mode ->
-            SegmentedButton(
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ProxyMode.entries.forEach { mode ->
+            ChoiceTile(
                 selected = selected == mode,
+                icon = mode.icon(),
+                label = mode.label,
                 onClick = { onSelect(mode) },
-                shape = SegmentedButtonDefaults.itemShape(index, ProxyMode.entries.size),
-                colors = segmentedColors(),
-                modifier = Modifier.height(44.dp),
-                label = { Text(mode.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                modifier = Modifier.weight(1f)
             )
         }
     }

@@ -15,10 +15,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Warm charcoal: 171312 canvas, 2D2929 cards, 383434 selection, D3C3C2 text/strokes, D6B0AE accent.
+// Warm charcoal: 171312 canvas, 2D2929 cards, 242020 inset tiles, 383434 selection, D3C3C2 text/strokes, D6B0AE accent.
 object Palette {
     val Canvas = Color(0xFF171312)
     val Card = Color(0xFF2D2929)
+    val Tile = Color(0xFF242020)
     val Selected = Color(0xFF383434)
     val Ink = Color(0xFFD3C3C2)
     val Rose = Color(0xFFD6B0AE)
@@ -58,7 +59,7 @@ val DarkColors: ColorScheme = darkColorScheme(
     surfaceBright = Palette.Selected,
     surfaceDim = Palette.Canvas,
     surfaceContainerLowest = Palette.Canvas,
-    surfaceContainerLow = Palette.Canvas,
+    surfaceContainerLow = Palette.Tile,
     surfaceContainer = Palette.Card,
     surfaceContainerHigh = Palette.Card,
     surfaceContainerHighest = Palette.Selected
@@ -68,7 +69,7 @@ val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(14.dp),
     medium = RoundedCornerShape(20.dp),
-    large = RoundedCornerShape(28.dp),
+    large = RoundedCornerShape(32.dp),
     extraLarge = RoundedCornerShape(40.dp)
 )
 
