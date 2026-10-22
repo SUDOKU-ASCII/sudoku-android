@@ -143,4 +143,13 @@ class GoCoreClientTest {
         assertEquals("global", ControllerApi.wireMode(ProxyMode.GLOBAL))
         assertEquals("direct", ControllerApi.wireMode(ProxyMode.DIRECT))
     }
+
+    @Test
+    fun probeResult_reportsOneRoundTripOutOfEight() {
+        fun rtt(ms: Long) = GoCoreClient.LatencyProbeResult(latencyMs = ms, connectOk = true).rttMs
+        assertEquals(100L, rtt(800))
+        assertEquals(13L, rtt(100))
+        assertEquals(1L, rtt(2))
+        assertEquals(-1L, rtt(-1))
+    }
 }

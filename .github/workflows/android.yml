@@ -47,7 +47,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: cce3162481e0a30fec928683deb99cc9276128b8
+          SUDOKU_REF: 56ce6f1aeea18aa69b9bc1d57557ed312b59e5f5  # v0.5.2.0
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -342,4 +342,59 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           make_latest: ${{ !contains(github.ref_name, '-rc') }}
           body: |
-            Release candidate for `v0.3.3`, tracking the upstream Sudoku core at commit `cce3162481e0a30fec928683deb99cc9276128b8` (with the external controller API), bundled with the upstream hev-socks5-tunnel `2.18.0` Android AAR.
+            ## Sudodroid v0.3.3
+
+            A ground-up rebuild of the interface and the way the app talks to the Sudoku core, now on the official **Sudoku v0.5.2.0** and **hev-socks5-tunnel 2.19.1**.
+
+            ### Highlights
+
+            - **New interface.** Dark-first Material 3 in a warm charcoal palette: borderless tonal cards, large rounded corners, a floating navigation pill and a single big power button. It adapts to the screen: bottom bar on phones, navigation rail on foldables and small tablets, rail plus two-pane layouts on large tablets.
+            - **Live speed and usage.** The app reads the core's external controller (`GET /traffic`) for the speed readout, session totals, the sparkline and the notification text. No patched core is needed, and the controller listens on loopback only, on a random port with a fresh secret on every start.
+            - **Live routing.** Global / Direct / PAC switches instantly through `PATCH /configs` on the running core: no reconnect, no dropped connections (the new mode applies to new connections). The PAC list is always passed to the core, so switching to PAC at runtime has your rules ready.
+            - **Activity tab.** Open connections with target, direct or proxied route and bytes each way, with per-connection and close-all actions. It polls only while visible.
+            - **Settings tab.** PAC rules, the reverse TCP-over-WebSocket forwarder and app info in one place.
+            - **Node latency is now a real RTT.** The probe times a full request (dial, Sudoku handshake, TLS, HTTP), which is about eight round trips, so the displayed figure is that time divided by 8. Numbers will look roughly eight times smaller than in earlier versions; do not compare them across versions.
+            - **Lighter on the battery.** The traffic stream is open only while the app is on screen or the screen is on and closes a few seconds later; one shared stream feeds the UI and the notification; the notification updates only when its text changes; no infinite animations and no polling timers while the screen is off.
+
+            ### Core and tunnel
+
+            | Component | Version |
+            | --- | --- |
+            | Sudoku core | [v0.5.2.0](https://github.com/SUDOKU-ASCII/sudoku/releases/tag/v0.5.2.0) (`56ce6f1`), wire protocol unchanged and interoperable with v0.5.1 / v0.5.0 servers |
+            | hev-socks5-tunnel | [2.19.1](https://github.com/heiher/hev-socks5-tunnel/releases/tag/2.19.1): lower memory use (small-packet compaction, idle heap release), faster TCP/UDP paths, UDP fixes |
+
+            ### Also in this release (from the release candidates)
+
+            - Fixed app UDP traffic (QUIC, voice calls) through the tunnel.
+            - `sudoku://` short links now keep the node name, on import and on copy.
+            - Fixed idle battery drain.
+            - The app module no longer pins an NDK version; the NDK is needed only to build the Go AAR.
+
+            ### Which file to download
+
+            | File | For |
+            | --- | --- |
+            | `*-arm64-v8a.apk` | Almost every phone and tablet made since 2017 (recommended) |
+            | `*-armeabi-v7a.apk` | Older 32-bit devices |
+            | `*-universal.apk` | If you are unsure; larger, runs on both |
+
+            Requires Android 10 (API 29) or newer. Your nodes and settings are kept when updating over a previous 0.3.x build signed with the same key.
+
+            **Full changelog:** https://github.com/SUDOKU-ASCII/sudoku-android/compare/v0.3.2...v0.3.3
+
+            ---
+
+            ## 中文说明
+
+            本版本从界面到内核对接方式整体重做,并升级到官方 **Sudoku v0.5.2.0** 与 **hev-socks5-tunnel 2.19.1**。
+
+            - **全新界面**:深色优先的 Material 3 暖炭色调,无描边的色块卡片、大圆角、悬浮导航条和一个大电源按钮;手机用底部导航,折叠屏和小平板用侧边导航栏,大平板为导航栏加双栏布局。
+            - **实时网速与用量**:直接读取内核 external controller 的 `/traffic`,用于网速、本次用量、折线图和通知栏,无需额外修改内核;控制器只监听本机回环,每次启动随机端口和随机密钥。
+            - **实时切换路由**:全局 / 直连 / PAC 通过 `PATCH /configs` 即时生效,无需重连、不断开已有连接(对新连接生效)。
+            - **Activity 页**:查看当前连接(目标、直连或代理、上下行流量),可关闭单个或全部连接,仅在页面可见时轮询。
+            - **设置页**:PAC 规则、反向转发器与应用信息集中管理。
+            - **节点延迟改为真实 RTT**:探测计时包含拨号、Sudoku 握手、TLS 与 HTTP,约等于 8 个往返,因此显示值为该耗时除以 8。数字会比旧版本小很多,不同版本之间不要直接对比。
+            - **更省电**:流量推流仅在应用可见或亮屏时连接,息屏几秒后断开;界面与通知共用同一路推流;通知仅在文字变化时刷新;无无限动画,息屏后无轮询定时器。
+            - **内核与隧道**:Sudoku v0.5.2.0(协议不变,与 v0.5.1 / v0.5.0 服务端互通);hev-socks5-tunnel 2.19.1(更低内存占用、更快的 TCP/UDP 路径与 UDP 修复)。
+            - **沿用自候选版的修复**:修复应用 UDP(QUIC、语音通话)、`sudoku://` 短链接保留节点名、修复空闲耗电。
+            - **下载哪个**:绝大多数 2017 年后的设备选 `arm64-v8a`;老旧 32 位设备选 `armeabi-v7a`;不确定就选 `universal`。需要 Android 10 及以上;使用相同签名覆盖安装时会保留节点与设置。

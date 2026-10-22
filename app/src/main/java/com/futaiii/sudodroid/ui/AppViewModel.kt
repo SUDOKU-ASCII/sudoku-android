@@ -207,7 +207,7 @@ class AppViewModel(
             val latency = kotlin.runCatching {
                 val current = state.value
                 val result = GoCoreClient.probeLatency(node, current.globalProxySettings)
-                result.latencyMs.takeIf { result.connectOk && it >= 0 }
+                result.rttMs.takeIf { result.connectOk && it >= 0 }
             }.getOrNull()
             latencyMap.value = latencyMap.value.toMutableMap().apply { put(node.id, latency) }
         }

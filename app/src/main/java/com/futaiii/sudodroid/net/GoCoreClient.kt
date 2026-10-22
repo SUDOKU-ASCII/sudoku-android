@@ -145,6 +145,8 @@ object GoCoreClient {
         }
     }
 
+    const val PROBE_ROUND_TRIPS = 8
+
     fun probeLatency(node: NodeConfig, globalProxySettings: GlobalProxySettings = GlobalProxySettings()): LatencyProbeResult {
         val configJson = buildConfigJson(node, globalProxySettings)
         val raw = MobileBinding.probeLatencyJson(configJson)
@@ -284,7 +286,14 @@ object GoCoreClient {
         @SerialName("connect_ok") val connectOk: Boolean = false,
         @SerialName("checked_at_unix") val checkedAtUnix: Long = 0,
         val error: String = ""
-    )
+    ) {
+        /**
+         * The probe times a whole request (dial, Sudoku handshake, TLS, HTTP), which costs about
+         * [PROBE_ROUND_TRIPS] round trips, so one RTT is the elapsed time divided by that.
+         */
+        val rttMs: Long
+            get() = if (latencyMs < 0) latencyMs else maxOf(1L, Math.round(latencyMs.toDouble() / GoCoreClient.PROBE_ROUND_TRIPS))
+    }
 
     @Serializable
     data class ReverseForwardStatus(

@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/SUDOKU-ASCII/sudoku-android?style=for-the-badge)](https://github.com/SUDOKU-ASCII/sudoku-android/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
-Current release: `v0.3.3-rc02` (release candidate), with Sudoku core commit `cce3162481e0a30fec928683deb99cc9276128b8` (with the external controller API) and hev-socks5-tunnel `2.18.0`.
+Current release: `v0.3.3`, with Sudoku core [`v0.5.2.0`](https://github.com/SUDOKU-ASCII/sudoku/releases/tag/v0.5.2.0) (commit `56ce6f1aeea18aa69b9bc1d57557ed312b59e5f5`) and hev-socks5-tunnel `2.19.1`.
 
 Sudodroid is a thin Android shell around the upstream [sudoku](https://github.com/SUDOKU-ASCII/sudoku) Go core. The UI is written with Kotlin + Jetpack Compose (Material 3, dark-first), while all protocol/transport logic is compiled into an AAR via `gomobile`. Highlights:
 
@@ -20,7 +20,7 @@ Sudodroid is a thin Android shell around the upstream [sudoku](https://github.co
 - Quick Settings tile to start/stop the VPN.
 - Import/export `sudoku://` short links, copy them straight into the clipboard, and rename nodes inline.
 - Foreground VPN service that starts the Go core, binds a local mixed proxy, and bridges the device TUN interface through `hev-socks5-tunnel`.
-- Built-in latency probes for each node (runs the thin Kotlin dialer without affecting the active tunnel).
+- Built-in latency probes for each node (runs the thin Kotlin dialer without affecting the active tunnel). A probe times a whole request (dial, Sudoku handshake, TLS, HTTP), about eight round trips, so the figure shown is that time divided by 8.
 - Keeps all configuration inside Jetpack DataStore; node selection survives process restarts.
 
 ## Architecture
@@ -47,7 +47,7 @@ Battery notes: no polling timers while the screen is off, no infinite animations
 
 ## Native tunnel
 
-Gradle downloads the [hev-socks5-tunnel 2.18.0 Android AAR](https://github.com/heiher/hev-socks5-tunnel/releases/tag/2.18.0) and verifies its SHA-256. The AAR includes the native libraries and the default `hev.htproxy.TProxyService` JNI binding; the VPN service passes its TUN fd to that binding. No separate tunnel source checkout or `ndk-build` step is needed.
+Gradle downloads the [hev-socks5-tunnel 2.19.1 Android AAR](https://github.com/heiher/hev-socks5-tunnel/releases/tag/2.19.1) and verifies its SHA-256. The AAR includes the native libraries and the default `hev.htproxy.TProxyService` JNI binding; the VPN service passes its TUN fd to that binding. No separate tunnel source checkout or `ndk-build` step is needed.
 
 ```bash
 ./gradlew assembleRelease
@@ -61,8 +61,8 @@ Gradle downloads the [hev-socks5-tunnel 2.18.0 Android AAR](https://github.com/h
 
 During `preBuild`, Gradle will:
 
-1. Download and verify the hev-socks5-tunnel `2.18.0` AAR into `app/libs/`.
-2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: commit `cce3162481e0a30fec928683deb99cc9276128b8`, with the external controller API), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
+1. Download and verify the hev-socks5-tunnel `2.19.1` AAR into `app/libs/`.
+2. Run `scripts/build_sudoku_aar.sh`, which clones upstream `sudoku` at `SUDOKU_REF` (default: commit `56ce6f1aeea18aa69b9bc1d57557ed312b59e5f5`, i.e. Sudoku `v0.5.2.0`), overlays the Android mobile entrypoints under `scripts/sudoku_patches/`, executes `gomobile bind` (default targets: `android/arm,android/arm64`) on `./pkg/mobile`, and drops the AAR into `app/libs/`.
 
 Artifacts live in `app/build/outputs/apk/<variant>/`.
 

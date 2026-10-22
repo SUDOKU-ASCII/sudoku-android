@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 WORK_DIR="${ROOT}/build_work"
 SUDOKU_REPO="https://github.com/SUDOKU-ASCII/sudoku.git"
 # Default to the pinned upstream commit.
-SUDOKU_REF="${SUDOKU_REF:-cce3162481e0a30fec928683deb99cc9276128b8}"
+SUDOKU_REF="${SUDOKU_REF:-56ce6f1aeea18aa69b9bc1d57557ed312b59e5f5}"
 SUDOKU_DIR="${WORK_DIR}/sudoku"
 PATCH_DIR="${ROOT}/scripts/sudoku_patches"
 OUT_AAR="${ROOT}/app/libs/sudoku.aar"
