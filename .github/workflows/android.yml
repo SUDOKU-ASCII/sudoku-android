@@ -47,7 +47,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-          SUDOKU_REF: 4534bef6206b306d92d8db1c41351f9c65b69f11  # v0.5.2-01
+          SUDOKU_REF: v0.5.2-1  # v0.5.2-1
         run: |
           bash scripts/build_sudoku_aar.sh
 
@@ -350,7 +350,7 @@ jobs:
 
             | Component | Version |
             | --- | --- |
-            | Sudoku core | [v0.5.2-01](https://github.com/SUDOKU-ASCII/sudoku/releases/tag/v0.5.2-01) (`4534bef`): the local SOCKS5 UDP relay keeps its loopback address and address family, fixing UDP/QUIC and IPv6 UDP for local clients; wire protocol unchanged and interoperable with v0.5.2 / v0.5.1 / v0.5.0 servers |
+            | Sudoku core | [v0.5.2-1](https://github.com/SUDOKU-ASCII/sudoku/releases/tag/v0.5.2-1) (`4534bef`): the local SOCKS5 UDP relay keeps its loopback address and address family, fixing UDP/QUIC and IPv6 UDP for local clients; wire protocol unchanged and interoperable with v0.5.2 / v0.5.1 / v0.5.0 servers |
             | hev-socks5-tunnel | [2.19.3](https://github.com/heiher/hev-socks5-tunnel/releases/tag/2.19.3): fixes Android TLS relocation errors when loading the JNI library |
 
             ### Changes
@@ -377,7 +377,7 @@ jobs:
 
             维护版本：升级 Sudoku 内核与原生隧道，应用界面和协议均无变化。
 
-            - **Sudoku 内核 v0.5.2-01**（`4534bef`）：本地 SOCKS5 客户端的 UDP ASSOCIATE 现在保留 loopback 中继地址与地址族，修复 UDP/QUIC、IPv6 UDP（如 dae）被通告到无关网卡地址的问题；wire 协议不变，与 v0.5.2 / v0.5.1 / v0.5.0 服务端互通。
+            - **Sudoku 内核 v0.5.2-1**（`4534bef`）：本地 SOCKS5 客户端的 UDP ASSOCIATE 现在保留 loopback 中继地址与地址族，修复 UDP/QUIC、IPv6 UDP（如 dae）被通告到无关网卡地址的问题；wire 协议不变，与 v0.5.2 / v0.5.1 / v0.5.0 服务端互通。
             - **hev-socks5-tunnel 2.19.3**：修复 Android 上 JNI 库因 TLS relocation 加载失败的问题。
             - 其余与 v0.3.3 相同：界面、节点格式和协议均未变化。
 
