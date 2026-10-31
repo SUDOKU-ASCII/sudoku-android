@@ -14,7 +14,7 @@ val gitRefName: String? = System.getenv("GITHUB_REF_NAME")
 val tagVersionName: String? = gitRefName
     ?.removePrefix("refs/tags/")
     ?.removePrefix("v")
-val computedVersionName: String = tagVersionName ?: "0.3.3"
+val computedVersionName: String = tagVersionName ?: "0.3.4"
 
 fun computeVersionCodeFromName(name: String): Int {
     val parts = name.split(".")
@@ -162,8 +162,8 @@ dependencies {
 
 // Use the upstream AAR, which contains the default JNI binding and Android libraries.
 val ensureHevAar by tasks.registering {
-    val version = "2.19.1"
-    val expectedSha256 = "107958f7a07051386248ba8dba778b63d8dcefdfb2c3665b0ee9a8c93de5f6ca"
+    val version = "2.19.3"
+    val expectedSha256 = "ab6c581e6157680cfe5687ee7bbdcf95405c006c2db3701879ec44b9e5f83836"
     val aar = projectDir.resolve("libs/hev-socks5-tunnel.aar")
     inputs.property("hevVersion", version)
     inputs.property("hevSha256", expectedSha256)
